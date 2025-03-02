@@ -35,6 +35,31 @@ M.locate_quarto_bib = function()
   end
 end
 
+M.locate_typst_bib = function()
+  local bufname = vim.api.nvim_buf_get_name(0) -- Get the current file path
+  local dirname = vim.fn.fnamemodify(bufname, ':h') -- Get directory of the Typst file
+
+  local lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
+  for _, line in ipairs(lines) do
+    -- Adjust the pattern to capture only the first argument (the .bib file name)
+    local location = string.match(line, '#bibliography%s*%(%s*"([^"]+)"')
+
+    if location then
+      local expanded_path = vim.fn.expand(location)
+
+      -- If the path is relative, convert it to an absolute path
+      if not expanded_path:match '^/' then
+        expanded_path = dirname .. '/' .. expanded_path
+      end
+
+      return expanded_path
+    end
+  end
+
+  vim.notify('No Typst bibliography file found!', vim.log.levels.WARN)
+  return nil
+end
+
 M.locate_tex_bib = function()
   local lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
   for _, line in ipairs(lines) do
@@ -55,36 +80,6 @@ M.locate_tex_bib = function()
   end
 end
 
-M.locate_typst_bib = function()
-  vim.notify('Searching for Typst bibliography file...', vim.log.levels.INFO)
-
-  local bufname = vim.api.nvim_buf_get_name(0) -- Get the current file path
-  local dirname = vim.fn.fnamemodify(bufname, ':h') -- Get directory of the Typst file
-
-  local lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
-  for _, line in ipairs(lines) do
-    vim.notify('Checking line: ' .. line, vim.log.levels.DEBUG) -- Debugging
-
-    -- Adjust the pattern to capture only the first argument (the .bib file name)
-    local location = string.match(line, '#bibliography%s*%(%s*"([^"]+)"')
-
-    if location then
-      local expanded_path = vim.fn.expand(location)
-
-      -- If the path is relative, convert it to an absolute path
-      if not expanded_path:match '^/' then
-        expanded_path = dirname .. '/' .. expanded_path
-      end
-
-      vim.notify('Using Typst bibliography file: ' .. expanded_path, vim.log.levels.INFO)
-      return expanded_path
-    end
-  end
-
-  vim.notify('No Typst bibliography file found!', vim.log.levels.WARN)
-  return nil
-end
-
 M.entry_to_bib_entry = function(entry)
   local bib_entry = '@'
   local item = entry.value
@@ -100,7 +95,7 @@ M.entry_to_bib_entry = function(entry)
       -- remove trailing ' and '
       author = string.sub(author, 1, -6)
       bib_entry = bib_entry .. author .. '},\n'
-    elseif k ~= 'citekey' and k ~= 'itemType' and k ~= 'attachment' and type(v) == 'string' then
+    elseif k ~= 'citekey' and k ~= 'itemType' and k ~= 'attachment' and k ~= 'date' and type(v) == 'string' then
       bib_entry = bib_entry .. '  ' .. k .. ' = {' .. v .. '},\n'
     end
   end
