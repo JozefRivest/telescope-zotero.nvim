@@ -23,6 +23,12 @@ local default_opts = {
       end,
       locate_bib = bib.locate_quarto_bib,
     },
+    typst = {
+      insert_key_formatter = function(citekey)
+        return '<' .. citekey .. '>'
+      end,
+      locate_bib = bib.locate_typst_bib,
+    },
     tex = {
       insert_key_formatter = function(citekey)
         return '\\cite{' .. citekey .. '}'
@@ -161,16 +167,19 @@ local insert_entry = function(entry, insert_key_fn, locate_bib_fn)
   local citekey = entry.value.citekey
   local insert_key = insert_key_fn(citekey)
   vim.api.nvim_put({ insert_key }, '', false, true)
+
   local bib_path = nil
   if type(locate_bib_fn) == 'string' then
     bib_path = locate_bib_fn
   elseif type(locate_bib_fn) == 'function' then
     bib_path = locate_bib_fn()
   end
+
   if bib_path == nil then
     vim.notify_once('Could not find a bibliography file', vim.log.levels.WARN)
     return
   end
+
   bib_path = vim.fn.expand(bib_path)
 
   -- check if is already in the bib file
@@ -181,6 +190,7 @@ local insert_entry = function(entry, insert_key_fn, locate_bib_fn)
   end
 
   local bib_entry = bib.entry_to_bib_entry(entry)
+
   -- otherwise append the entry to the bib file at bib_path
   local file = io.open(bib_path, 'a')
   if file == nil then
