@@ -58,13 +58,15 @@ end
 M.locate_typst_bib = function()
   local lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
   for _, line in ipairs(lines) do
-    -- Ensure we correctly capture the .bib file path
-    local location = string.match(line, [[#bibliography%(%s*"([^"]+)"%s*%)]])
+    local location = string.match(line, '#bibliography%(%s*"([^"]+)"%s*%)')
     if location then
-      return vim.fn.expand(location) -- Expand tilde (~) if needed
+      local expanded_path = vim.fn.expand(location)
+      vim.notify('Found Typst bibliography file: ' .. expanded_path, vim.log.levels.INFO)
+      return expanded_path
     end
   end
-  return nil -- Return nil if no bibliography command is found
+  vim.notify('No Typst bibliography file found!', vim.log.levels.WARN)
+  return nil
 end
 
 M.entry_to_bib_entry = function(entry)
