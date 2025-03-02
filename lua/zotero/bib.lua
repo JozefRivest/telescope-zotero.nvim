@@ -56,15 +56,23 @@ M.locate_tex_bib = function()
 end
 
 M.locate_typst_bib = function()
+  vim.notify('Searching for Typst bibliography file...', vim.log.levels.INFO)
+
+  -- Get all lines in the current buffer
   local lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
+
+  -- Iterate over each line to find #bibliography("file.bib")
   for _, line in ipairs(lines) do
-    local location = string.match(line, '#bibliography%(%s*"([^"]+)"%s*%)')
+    vim.notify('Checking line: ' .. line, vim.log.levels.DEBUG) -- Debugging each line
+
+    local location = string.match(line, '#bibliography%s*%(%s*"([^"]+)"%s*%)')
     if location then
-      local expanded_path = vim.fn.expand(location)
+      local expanded_path = vim.fn.expand(location) -- Expands ~/ to full home directory
       vim.notify('Found Typst bibliography file: ' .. expanded_path, vim.log.levels.INFO)
       return expanded_path
     end
   end
+
   vim.notify('No Typst bibliography file found!', vim.log.levels.WARN)
   return nil
 end
