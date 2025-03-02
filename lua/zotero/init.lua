@@ -2,6 +2,7 @@ local finders = require 'telescope.finders'
 local pickers = require 'telescope.pickers'
 local previewers = require 'telescope.previewers'
 local conf = require('telescope.config').values
+local Popup = require 'nui.popup'
 local action_state = require 'telescope.actions.state'
 local actions = require 'telescope.actions'
 local bib = require 'zotero.bib'
@@ -25,23 +26,50 @@ local default_opts = {
     },
     typst = {
       insert_key_formatter = function(citekey)
-        -- Prompt the user to choose between @citation and #cite(<citation>)
         local choices = {
           { label = '@citation', format = '@' .. citekey },
           { label = '#cite(<citation>)', format = '#cite(<' .. citekey .. '>)' },
         }
 
-        vim.ui.select(choices, {
-          prompt = 'Choose Typst citation format:',
-          format_item = function(choice)
-            return choice.label
+        local popup = Popup {
+          enter = true,
+          focusable = true,
+          border = 'rounded',
+          position = '50%', -- Centers the window
+          size = {
+            width = 30,
+            height = 3,
+          },
+        }
+
+        -- Mount the popup
+        popup:mount()
+
+        -- Fill the popup with choices
+        vim.api.nvim_buf_set_lines(popup.bufnr, 0, -1, false, {
+          'Choose Typst citation format:',
+          '1. @citation',
+          '2. #cite(<citation>)',
+        })
+
+        -- Handle user input
+        vim.api.nvim_buf_set_keymap(popup.bufnr, 'n', '1', '', {
+          noremap = true,
+          silent = true,
+          callback = function()
+            popup:unmount()
+            vim.api.nvim_put({ choices[1].format }, '', false, true)
           end,
-        }, function(selected)
-          if selected then
-            -- Insert the chosen citation format
-            vim.api.nvim_put({ selected.format }, '', false, true)
-          end
-        end)
+        })
+
+        vim.api.nvim_buf_set_keymap(popup.bufnr, 'n', '2', '', {
+          noremap = true,
+          silent = true,
+          callback = function()
+            popup:unmount()
+            vim.api.nvim_put({ choices[2].format }, '', false, true)
+          end,
+        })
       end,
       locate_bib = bib.locate_typst_bib,
     },
