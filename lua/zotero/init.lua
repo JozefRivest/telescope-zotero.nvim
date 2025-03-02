@@ -25,7 +25,23 @@ local default_opts = {
     },
     typst = {
       insert_key_formatter = function(citekey)
-        return '@' .. citekey
+        -- Prompt the user to choose between @citation and #cite(<citation>)
+        local choices = {
+          { label = '@citation', format = '@' .. citekey },
+          { label = '#cite(<citation>)', format = '#cite(<' .. citekey .. '>)' },
+        }
+
+        vim.ui.select(choices, {
+          prompt = 'Choose Typst citation format:',
+          format_item = function(choice)
+            return choice.label
+          end,
+        }, function(selected)
+          if selected then
+            -- Insert the chosen citation format
+            vim.api.nvim_put({ selected.format }, '', false, true)
+          end
+        end)
       end,
       locate_bib = bib.locate_typst_bib,
     },
