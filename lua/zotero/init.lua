@@ -22,7 +22,7 @@ local default_opts = {
       insert_key_formatter = function(citekey)
         local choices = {
           { label = '@citation', format = '@' .. citekey },
-          { label = '[[@citation]]', format = '[@' .. citekey .. ']' },
+          { label = '/[@citation/]', format = '[@' .. citekey .. ']' },
         }
 
         vim.ui.select(choices, {
