@@ -20,7 +20,22 @@ local default_opts = {
   ft = {
     quarto = {
       insert_key_formatter = function(citekey)
-        return '@' .. citekey
+        local choices = {
+          { label = '@citation', format = '@' .. citekey },
+          { label = '[@citation]', format = '[@' .. citekey .. ']' },
+        }
+
+        vim.ui.select(choices, {
+          prompt = 'Choose Quarto citation format:',
+          format_item = function(choice)
+            return choice.label
+          end,
+        }, function(selected)
+          if selected then
+            -- Insert the chosen citation format
+            vim.api.nvim_put({ selected.format }, '', false, true)
+          end
+        end)
       end,
       locate_bib = bib.locate_quarto_bib,
     },
