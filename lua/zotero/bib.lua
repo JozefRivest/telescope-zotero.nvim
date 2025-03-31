@@ -85,20 +85,64 @@ M.entry_to_bib_entry = function(entry)
   local item = entry.value
   local citekey = item.citekey or ''
   bib_entry = bib_entry .. (item.itemType or '') .. '{' .. citekey .. ',\n'
-  for k, v in pairs(item) do
-    if k == 'creators' then
-      bib_entry = bib_entry .. '  author = {'
-      local author = ''
-      for _, creator in ipairs(v) do
-        author = author .. (creator.lastName or '') .. ', ' .. (creator.firstName or '') .. ' and '
+
+  -- Process creators with deduplication
+  if item.creators then
+    local seen_creators = {}
+    local author_list = {}
+
+    for _, creator in ipairs(item.creators) do
+      local creator_key = (creator.lastName or '') .. '|' .. (creator.firstName or '')
+      if not seen_creators[creator_key] then
+        seen_creators[creator_key] = true
+        table.insert(author_list, (creator.lastName or '') .. ', ' .. (creator.firstName or ''))
       end
-      -- remove trailing ' and '
-      author = string.sub(author, 1, -6)
-      bib_entry = bib_entry .. author .. '},\n'
-    elseif k ~= 'citekey' and k ~= 'itemType' and k ~= 'attachment' and k ~= 'date' and type(v) == 'string' then
-      bib_entry = bib_entry .. '  ' .. k .. ' = {' .. v .. '},\n'
+    end
+
+    if #author_list > 0 then
+      bib_entry = bib_entry .. '  author = {' .. table.concat(author_list, ' and ') .. '},\n'
     end
   end
+
+  -- Process all other fields
+  for k, v in pairs(item) do
+    if k ~= 'citekey' and k ~= 'itemType' and k ~= 'creators' and k ~= 'attachment' and k ~= 'date' and type(v) == 'string' then
+      -- Format the field based on Better BibTeX expectations
+      local field_name = k
+
+      -- Handle special fields that BBT might format differently
+      if k == 'url' then
+        -- Keep URL as is
+        bib_entry = bib_entry .. '  ' .. field_name .. ' = {' .. v .. '},\n'
+      elseif k == 'DOI' then
+        -- Format DOI without the URL part
+        bib_entry = bib_entry .. '  doi = {' .. v .. '},\n'
+      elseif k == 'abstractNote' then
+        -- Rename to abstract as used in BBT
+        bib_entry = bib_entry .. '  abstract = {' .. v .. '},\n'
+      else
+        bib_entry = bib_entry .. '  ' .. field_name .. ' = {' .. v .. '},\n'
+      end
+    end
+  end
+
+  -- Handle date/year properly
+  if item.date then
+    -- Extract year from date field if not already present
+    if not item.year then
+      local year = string.match(item.date, '(%d%d%d%d)')
+      if year then
+        bib_entry = bib_entry .. '  year = {' .. year .. '},\n'
+      end
+    end
+
+    -- Add date field in ISO format
+    local iso_date = string.match(item.date, '(%d%d%d%d%-%d%d%-%d%d)')
+    if iso_date then
+      bib_entry = bib_entry .. '  date = {' .. iso_date .. '},\n'
+    end
+  end
+
   bib_entry = bib_entry .. '}\n'
   return bib_entry
 end
