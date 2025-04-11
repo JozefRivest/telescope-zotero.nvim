@@ -61,25 +61,17 @@ When the telescope picker is open, the following key mappings are available:
 
 | Key | Mode | Description |
 |-----|------|-------------|
-| `<CR>` | Normal/Insert | Insert citation with default format for current filetype |
+| `<CR>` | Normal/Insert | Insert citation (shows format selection after closing) |
 | `<C-o>` | Insert | Open attachment (PDF or DOI) |
 | `o` | Normal | Open attachment (PDF or DOI) |
 | `<C-h>` | Insert | Show help with available commands |
 | `?` | Normal | Show help with available commands |
 
-For Quarto/Markdown files:
-| Key | Mode | Description |
-|-----|------|-------------|
-| `<C-q>1` | Normal/Insert | Insert citation with `@citekey` format |
-| `<C-q>2` | Normal/Insert | Insert citation with `[@citekey]` format |
-| `<C-q>` | Insert | Show Quarto format options |
+When you press Enter to select a citation, a format selection dialog will appear if multiple formats are available for your current filetype:
 
-For Typst files:
-| Key | Mode | Description |
-|-----|------|-------------|
-| `<C-t>1` | Normal/Insert | Insert citation with `@citekey` format |
-| `<C-t>2` | Normal/Insert | Insert citation with `#cite(<citekey>)` format |
-| `<C-t>` | Insert | Show Typst format options |
+- For Quarto/Markdown files: Choose between `@citekey` and `[@citekey]`
+- For Typst files: Choose between `@citekey` and `#cite(<citekey>)`
+- For LaTeX/TeX files: Automatically inserts `\cite{citekey}`
 
 ## Demo
 
