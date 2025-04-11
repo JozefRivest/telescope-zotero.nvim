@@ -5,7 +5,7 @@
 ### Features
 
 * add citation format preview to telescope UI
-* add in-preview citation format selection when pressing Enter
+* add popup window for citation format selection after pressing Enter
 
 ### Bug Fixes
 

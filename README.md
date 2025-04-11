@@ -69,11 +69,11 @@ When the telescope picker is open, the following key mappings are available:
 
 ### Format Selection
 
-When you press Enter on a citation, the preview panel will change to format selection mode:
+When you press Enter on a citation, a format selection popup will appear:
 
 1. The available formats will be displayed with numbers (1, 2, etc.)
 2. Press the corresponding number key to insert that format
-3. Press Esc to cancel and return to the normal preview
+3. Press Esc to cancel the selection
 
 Available formats by filetype:
 - For Quarto/Markdown files: `@citekey` and `[@citekey]`
