@@ -11,6 +11,14 @@ via this new plugin.
 - [Zotero](https://www.zotero.org/)
 - [Better Bib Tex](https://retorque.re/zotero-better-bibtex/)
 
+## Features
+
+- Search your Zotero library directly from Neovim
+- Insert citations in the appropriate format for your filetype (LaTeX, Quarto, Typst)
+- Preview citation formats in the telescope UI
+- Open PDFs and DOI links directly from the picker
+- Automatically add references to your bibliography file
+
 ## Setup
 
 Add to your telescope config, e.g. in lazy.nvim

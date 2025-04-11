@@ -180,7 +180,11 @@ M.entry_to_bib_entry = function(entry)
       local author_list = {}
       for _, creator_key in ipairs(creators_by_type['author']) do
         local lastName, firstName = creator_key:match '([^|]+)|(.+)'
-        table.insert(author_list, lastName .. ', ' .. firstName)
+        if lastName and firstName then
+          table.insert(author_list, lastName .. ', ' .. firstName)
+        elseif lastName then
+          table.insert(author_list, lastName)
+        end
       end
 
       if #author_list > 0 then
@@ -193,7 +197,11 @@ M.entry_to_bib_entry = function(entry)
       local editor_list = {}
       for _, creator_key in ipairs(creators_by_type['editor']) do
         local lastName, firstName = creator_key:match '([^|]+)|(.+)'
-        table.insert(editor_list, lastName .. ', ' .. firstName)
+        if lastName and firstName then
+          table.insert(editor_list, lastName .. ', ' .. firstName)
+        elseif lastName then
+          table.insert(editor_list, lastName)
+        end
       end
 
       if #editor_list > 0 then

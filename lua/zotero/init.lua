@@ -275,10 +275,78 @@ local function make_entry(pre_entry)
     display = make_display,
     ordinal = display_value,
     preview_command = function(entry, bufnr)
+      -- Get the current filetype options for formatting
+      local ft_options = M.config.ft[vim.bo.filetype] or M.config.ft.default
+      local citekey = entry.value.citekey
+      
+      -- Gather all available citation formats
+      local formats = {
+        -- Add header line for citation formats section
+        "Available Citation Formats:",
+        "------------------------",
+      }
+      
+      -- Add formats for all supported filetypes
+      local ft_names = {
+        quarto = "Quarto",
+        typst = "Typst",
+        tex = "LaTeX/TeX",
+        plaintex = "PlainTeX",
+        default = "Default"
+      }
+      
+      -- Collect and display formats for each filetype
+      for ft_name, ft_config in pairs(M.config.ft) do
+        local format_line = ft_names[ft_name] .. ": "
+        
+        -- Handle formatter functions that return UI selectors
+        if ft_name == "quarto" then
+          format_line = format_line .. "@" .. citekey .. " or [@" .. citekey .. "]"
+        elseif ft_name == "typst" then
+          format_line = format_line .. "@" .. citekey .. " or #cite(<" .. citekey .. ">)"
+        else
+          -- For simple formatters, just call the function
+          local formatter = ft_config.insert_key_formatter
+          if type(formatter) == "function" then
+            local result = formatter(citekey)
+            if type(result) == "string" then
+              format_line = format_line .. result
+            end
+          end
+        end
+        
+        table.insert(formats, format_line)
+      end
+      
+      -- Add some spacing before the BibTeX entry
+      table.insert(formats, "")
+      table.insert(formats, "BibTeX Entry:")
+      table.insert(formats, "-------------")
+      
+      -- Add the BibTeX entry
       local bib_entry = bib.entry_to_bib_entry(entry)
-      local lines = vim.split(bib_entry, '\n')
+      local bib_lines = vim.split(bib_entry, '\n')
+      
+      -- Combine formats and BibTeX entry
+      local lines = vim.list_extend(formats, bib_lines)
+      
+      -- Update the buffer
       vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
-      vim.api.nvim_set_option_value('filetype', 'bibtex', { buf = bufnr })
+      
+      -- Set custom highlighting for the preview buffer
+      vim.api.nvim_set_option_value('filetype', 'markdown', { buf = bufnr })
+      
+      -- Apply custom syntax highlighting for the BibTeX part
+      local ns_id = vim.api.nvim_create_namespace('zotero_preview')
+      for i, line in ipairs(lines) do
+        if i > #formats then
+          vim.api.nvim_buf_add_highlight(bufnr, ns_id, 'Comment', i-1, 0, -1)
+        elseif i <= 2 or i == #formats - 2 or i == #formats - 1 then
+          vim.api.nvim_buf_add_highlight(bufnr, ns_id, 'Title', i-1, 0, -1)
+        elseif line:match("^%w+:") then
+          vim.api.nvim_buf_add_highlight(bufnr, ns_id, 'Identifier', i-1, 0, line:find(":"))
+        end
+      end
     end,
   }
 end
