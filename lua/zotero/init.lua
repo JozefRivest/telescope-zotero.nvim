@@ -92,6 +92,7 @@ local function open_url(url, file_type)
   vim.notify('Opening URL with: ' .. open_cmd .. ' ' .. vim.fn.shellescape(url), vim.log.levels.INFO)
   vim.fn.jobstart({ open_cmd, url }, { detach = true })
 end
+
 local function open_in_zotero(item_key)
   local zotero_url = 'zotero://select/library/items/' .. item_key
   open_url(zotero_url)
@@ -169,7 +170,7 @@ end
 local function append_to_bib(entry, locate_bib_fn)
   local citekey = entry.value.citekey
   local bib_path = nil
-  
+
   if type(locate_bib_fn) == 'string' then
     bib_path = locate_bib_fn
   elseif type(locate_bib_fn) == 'function' then
@@ -206,18 +207,18 @@ end
 -- This function gets the available citation formats for the given filetype
 local function get_available_formats(citekey, filetype)
   local formats = {}
-  
-  if filetype == "quarto" or filetype == "markdown" then
+
+  if filetype == 'quarto' or filetype == 'markdown' then
     formats = {
       { label = '@citation', format = '@' .. citekey },
       { label = '[@citation]', format = '[@' .. citekey .. ']' },
     }
-  elseif filetype == "typst" then
+  elseif filetype == 'typst' then
     formats = {
       { label = '@citation', format = '@' .. citekey },
       { label = '#cite(<citation>)', format = '#cite(<' .. citekey .. '>)' },
     }
-  elseif filetype == "tex" or filetype == "plaintex" then
+  elseif filetype == 'tex' or filetype == 'plaintex' then
     formats = {
       { label = '\\cite{citation}', format = '\\cite{' .. citekey .. '}' },
     }
@@ -226,7 +227,7 @@ local function get_available_formats(citekey, filetype)
       { label = '@citation', format = '@' .. citekey },
     }
   end
-  
+
   return formats
 end
 
@@ -237,18 +238,17 @@ local function insert_citation(format, entry, locate_bib_fn)
 end
 
 -- Function to handle the insertion of a citation
-
 local function insert_entry(entry, locate_bib_fn)
   local citekey = entry.value.citekey
   local filetype = vim.bo.filetype
   local formats = get_available_formats(citekey, filetype)
-  
+
   -- If there's only one format, use it directly
   if #formats == 1 then
     insert_citation(formats[1].format, entry, locate_bib_fn)
     return
   end
-  
+
   -- Otherwise show selection UI
   vim.ui.select(formats, {
     prompt = 'Choose citation format:',
@@ -306,85 +306,77 @@ local function make_entry(pre_entry)
       -- Get the current filetype options for formatting
       local ft_options = M.config.ft[vim.bo.filetype] or M.config.ft.default
       local citekey = entry.value.citekey
-      
+
       -- Gather all available citation formats
       local formats = {
         -- Add header line for citation formats section
-        "Available Citation Formats:",
-        "------------------------",
-        "",
-        "Press ENTER to select from the following formats:",
+        'Available Citation Formats:',
+        '------------------------',
+        '',
+        'Press ENTER to select from the following formats:',
       }
-      
+
       -- Add formats for all supported filetypes
       local ft_names = {
-        quarto = "Quarto",
-        typst = "Typst",
-        tex = "LaTeX/TeX",
-        plaintex = "PlainTeX",
-        default = "Default"
+        quarto = 'Quarto',
+        typst = 'Typst',
+        tex = 'LaTeX/TeX',
+        plaintex = 'PlainTeX',
+        default = 'Default',
       }
-      
+
       -- Collect and display formats for each filetype
       for ft_name, ft_config in pairs(M.config.ft) do
-        local format_line = ft_names[ft_name] or ft_name
-        format_line = format_line .. ": "
-        
+        local format_line = ft_names[ft_name] .. ': '
+
         -- Handle formatter functions that return UI selectors
-        if ft_name == "quarto" then
-          format_line = format_line .. "@" .. citekey .. " or [@" .. citekey .. "]"
-        elseif ft_name == "typst" then
-          format_line = format_line .. "@" .. citekey .. " or #cite(<" .. citekey .. ">)"
+        if ft_name == 'quarto' then
+          format_line = format_line .. '@' .. citekey .. ' or [@' .. citekey .. ']'
+        elseif ft_name == 'typst' then
+          format_line = format_line .. '@' .. citekey .. ' or #cite(<' .. citekey .. '>)'
         else
           -- For simple formatters, just call the function
           local formatter = ft_config.insert_key_formatter
-          if type(formatter) == "function" then
+          if type(formatter) == 'function' then
             local result = formatter(citekey)
-            if type(result) == "string" then
+            if type(result) == 'string' then
               format_line = format_line .. result
             end
           end
         end
-        
+
         table.insert(formats, format_line)
       end
-      
+
       -- Add some spacing before the BibTeX entry
-      table.insert(formats, "")
-      table.insert(formats, "BibTeX Entry:")
-      table.insert(formats, "-------------")
-      
+      table.insert(formats, '')
+      table.insert(formats, 'BibTeX Entry:')
+      table.insert(formats, '-------------')
+
       -- Add the BibTeX entry
       local bib_entry = bib.entry_to_bib_entry(entry)
       local bib_lines = vim.split(bib_entry, '\n')
-      
+
       -- Combine formats and BibTeX entry
       local lines = vim.list_extend(formats, bib_lines)
-      
+
       -- Update the buffer
       vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
-      
+
       -- Set custom highlighting for the preview buffer
       vim.api.nvim_set_option_value('filetype', 'markdown', { buf = bufnr })
-      
+
       -- Apply custom syntax highlighting for the BibTeX part
-      local ns_id = vim.api.nvim_create_namespace('zotero_preview')
-      
-      -- Apply highlighting safely by checking line numbers
+      local ns_id = vim.api.nvim_create_namespace 'zotero_preview'
       for i, line in ipairs(lines) do
-        local line_index = i-1  -- Convert to 0-based indexing for the buffer
-        
-        -- Ensure the line index is valid
-        if line_index >= 0 and line_index < #lines then
-          if i > #formats then
-            vim.api.nvim_buf_add_highlight(bufnr, ns_id, 'Comment', line_index, 0, -1)
-          elseif i <= 2 or i == #formats - 2 or i == #formats - 1 then
-            vim.api.nvim_buf_add_highlight(bufnr, ns_id, 'Title', line_index, 0, -1)
-          elseif line:match("^%w+:") then
-            local colon_pos = line:find(":")
-            if colon_pos then
-              vim.api.nvim_buf_add_highlight(bufnr, ns_id, 'Identifier', line_index, 0, colon_pos)
-            end
+        if i > #formats then
+          vim.api.nvim_buf_add_highlight(bufnr, ns_id, 'Comment', i - 1, 0, -1)
+        elseif i <= 2 or i == #formats - 2 or i == #formats - 1 then
+          vim.api.nvim_buf_add_highlight(bufnr, ns_id, 'Title', i - 1, 0, -1)
+        elseif line:match '^%w+:' then
+          local colon_pos = line:find ':'
+          if colon_pos then
+            vim.api.nvim_buf_add_highlight(bufnr, ns_id, 'Identifier', i - 1, 0, colon_pos)
           end
         end
       end
@@ -398,88 +390,88 @@ FormatSelectionPopup.__index = FormatSelectionPopup
 
 function FormatSelectionPopup.new(entry, formats, on_select, parent_win)
   local popup_options = {
-    relative = "win",
+    relative = 'win',
     win = parent_win,
-    position = "50%",
+    position = '50%',
     size = {
       width = 50,
-      height = #formats + 6
+      height = #formats + 6,
     },
     border = {
-      style = "rounded",
+      style = 'rounded',
       text = {
-        top = " Select Citation Format ",
-        top_align = "center",
-      }
+        top = ' Select Citation Format ',
+        top_align = 'center',
+      },
     },
     enter = true,
     focusable = true,
     zindex = 50,
   }
-  
+
   local popup = Popup(popup_options)
-  
+
   -- Set up the popup content
   popup:mount()
-  
+
   local bufnr = popup.bufnr
   local lines = {
-    "Press the number key to insert the selected format:",
-    ""
+    'Press the number key to insert the selected format:',
+    '',
   }
-  
+
   -- Add each format option
   for i, format in ipairs(formats) do
-    table.insert(lines, string.format("%d. %s → %s", i, format.label, format.format))
+    table.insert(lines, string.format('%d. %s → %s', i, format.label, format.format))
   end
-  
+
   -- Add footer
-  table.insert(lines, "")
-  table.insert(lines, "Press <Esc> to cancel")
-  
+  table.insert(lines, '')
+  table.insert(lines, 'Press <Esc> to cancel')
+
   -- Set content
   vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
-  
+
   -- Add highlighting
   vim.api.nvim_set_option_value('filetype', 'markdown', { buf = bufnr })
-  local ns_id = vim.api.nvim_create_namespace('zotero_format_selection')
-  
+  local ns_id = vim.api.nvim_create_namespace 'zotero_format_selection'
+
   -- Highlight the instructions
   vim.api.nvim_buf_add_highlight(bufnr, ns_id, 'Comment', 0, 0, -1)
-  
+
   -- Highlight each format option
-  for i = 3, 2 + #formats do  -- Fixed indexing: starting from line 3 (1-indexed)
+  for i = 2, 1 + #formats do
     -- Number highlight
-    vim.api.nvim_buf_add_highlight(bufnr, ns_id, 'Number', i-1, 0, 3)  -- Convert to 0-indexed
-    
-    -- Format highlight
-    local format_text = lines[i]  -- Fixed indexing: use the current line
-    if format_text then
-      local arrow_pos = format_text:find("→")
+    local line_idx = i
+    if lines[line_idx + 1] then
+      vim.api.nvim_buf_add_highlight(bufnr, ns_id, 'Number', line_idx, 0, 3)
+      -- Format highlight
+      local format_text = lines[line_idx + 1]
+      local arrow_pos = format_text and format_text:find '→'
       if arrow_pos then
-        vim.api.nvim_buf_add_highlight(bufnr, ns_id, 'Operator', i-1, arrow_pos-1, arrow_pos+1)
-        vim.api.nvim_buf_add_highlight(bufnr, ns_id, 'String', i-1, arrow_pos+2, -1)
+        vim.api.nvim_buf_add_highlight(bufnr, ns_id, 'Operator', line_idx, arrow_pos - 1, arrow_pos + 1)
+        vim.api.nvim_buf_add_highlight(bufnr, ns_id, 'String', line_idx, arrow_pos + 2, -1)
       end
     end
   end
-  
-  -- Highlight footer (note: lines array is 1-indexed, buffer is 0-indexed)
-  vim.api.nvim_buf_add_highlight(bufnr, ns_id, 'Comment', #lines-1, 0, -1)
-  
+
+  -- Highlight footer
+  vim.api.nvim_buf_add_highlight(bufnr, ns_id, 'Comment', #lines - 1, 0, -1)
+
   -- Setup mappings
   for i, format in ipairs(formats) do
     local key = tostring(i)
-    vim.keymap.set("n", key, function()
+    vim.keymap.set('n', key, function()
       popup:unmount()
       on_select(format.format)
     end, { buffer = bufnr, noremap = true, silent = true })
   end
-  
+
   -- Cancel mapping
-  vim.keymap.set("n", "<Esc>", function()
+  vim.keymap.set('n', '<Esc>', function()
     popup:unmount()
   end, { buffer = bufnr, noremap = true, silent = true })
-  
+
   return popup
 end
 
@@ -488,7 +480,7 @@ end
 M.picker = function(opts)
   opts = opts or {}
   local ft_options = M.config.ft[vim.bo.filetype] or M.config.ft.default
-  
+
   pickers
     .new(opts, {
       prompt_title = 'Zotero library',
@@ -500,4 +492,57 @@ M.picker = function(opts)
       previewer = previewers.display_content.new(opts),
       attach_mappings = function(prompt_bufnr, map)
         -- Default action: show format selection popup
-        actions.select_default:replace
+        actions.select_default:replace(function()
+          local entry = action_state.get_selected_entry()
+          local citekey = entry.value.citekey
+          local filetype = vim.bo.filetype
+          local formats = get_available_formats(citekey, filetype)
+
+          -- If there's only one format, use it directly
+          if #formats == 1 then
+            actions.close(prompt_bufnr)
+            insert_citation(formats[1].format, entry, ft_options.locate_bib)
+            return
+          end
+
+          -- Otherwise show the format selection popup
+          actions.close(prompt_bufnr)
+
+          -- Create the format selection popup
+          local current_win = vim.api.nvim_get_current_win()
+          local popup = FormatSelectionPopup.new(entry, formats, function(format)
+            insert_citation(format, entry, ft_options.locate_bib)
+          end, current_win)
+        end)
+
+        -- Update the mapping to open PDF or DOI
+        map('i', '<C-o>', function()
+          local entry = action_state.get_selected_entry()
+          open_attachment(entry.value)
+        end)
+        map('n', 'o', function()
+          local entry = action_state.get_selected_entry()
+          open_attachment(entry.value)
+        end)
+
+        -- Add help mapping to show available commands
+        map('i', '<C-h>', function()
+          vim.api.nvim_echo({
+            { 'Available Commands:', 'Title' },
+            { ' <CR>: Select citation | <C-o>: Open attachment', 'None' },
+          }, false, {})
+        end)
+        map('n', '?', function()
+          vim.api.nvim_echo({
+            { 'Available Commands:', 'Title' },
+            { ' <CR>: Select citation | o: Open attachment', 'None' },
+          }, false, {})
+        end)
+
+        return true
+      end,
+    })
+    :find()
+end
+
+return M
