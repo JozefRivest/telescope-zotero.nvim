@@ -309,8 +309,10 @@ local function make_entry(pre_entry)
       -- Gather all available citation formats
       local formats = {
         -- Add header line for citation formats section
-        "Available Citation Formats (press Enter to select):",
-        "------------------------------------------",
+        "Available Citation Formats:",
+        "------------------------",
+        "",
+        "Press ENTER to select from the following formats:",
       }
       
       -- Add formats for all supported filetypes
@@ -381,11 +383,102 @@ local function make_entry(pre_entry)
   }
 end
 
+-- Create a custom previewer that allows format selection
+local format_previewer = function(opts)
+  -- Start with the display_content previewer as a base
+  local previewer = previewers.display_content.new(opts)
+  
+  -- Add a state for the preview mode
+  previewer.format_selection_mode = false
+  previewer.selected_formats = {}
+  
+  -- Override the preview_fn function to handle both modes
+  local original_preview_fn = previewer.preview_fn
+  previewer.preview_fn = function(self, entry, status)
+    if not self.format_selection_mode then
+      -- Regular preview mode
+      return original_preview_fn(self, entry, status)
+    else
+      -- Format selection mode
+      local bufnr = status.preview_bufnr
+      local citekey = entry.value.citekey
+      local formats = self.selected_formats
+      
+      -- Create the header for format selection
+      local lines = {
+        "SELECT CITATION FORMAT",
+        "====================",
+        "",
+        "Press the number key to insert the citation format:",
+        "",
+      }
+      
+      -- Add each format with a number
+      for i, format in ipairs(formats) do
+        table.insert(lines, i .. ") " .. format.label .. " → " .. format.format)
+      end
+      
+      -- Add instructions at the bottom
+      table.insert(lines, "")
+      table.insert(lines, "Press <Esc> to cancel")
+      
+      -- Update buffer content
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
+      
+      -- Add highlighting
+      vim.api.nvim_set_option_value('filetype', 'markdown', { buf = bufnr })
+      local ns_id = vim.api.nvim_create_namespace('zotero_format_selection')
+      vim.api.nvim_buf_clear_namespace(bufnr, ns_id, 0, -1)
+      
+      -- Highlight the title
+      vim.api.nvim_buf_add_highlight(bufnr, ns_id, 'Title', 0, 0, -1)
+      vim.api.nvim_buf_add_highlight(bufnr, ns_id, 'Title', 1, 0, -1)
+      
+      -- Highlight the instructions
+      vim.api.nvim_buf_add_highlight(bufnr, ns_id, 'Comment', 3, 0, -1)
+      vim.api.nvim_buf_add_highlight(bufnr, ns_id, 'Comment', #lines-1, 0, -1)
+      
+      -- Highlight each format option
+      for i = 6, 6 + #formats - 1 do
+        -- Number highlight
+        vim.api.nvim_buf_add_highlight(bufnr, ns_id, 'Number', i-1, 0, 1)
+        -- Arrow highlight
+        local arrow_pos = lines[i]:find("→")
+        if arrow_pos then
+          vim.api.nvim_buf_add_highlight(bufnr, ns_id, 'Operator', i-1, arrow_pos-1, arrow_pos+1)
+        end
+        -- Format highlight
+        local format_pos = lines[i]:find("→ ")
+        if format_pos then
+          vim.api.nvim_buf_add_highlight(bufnr, ns_id, 'String', i-1, format_pos+1, -1)
+        end
+      end
+    end
+  end
+  
+  -- Function to enter format selection mode
+  previewer.enter_format_selection = function(self, entry, status, formats)
+    self.format_selection_mode = true
+    self.selected_formats = formats
+    self:preview_fn(entry, status)
+  end
+  
+  -- Function to exit format selection mode
+  previewer.exit_format_selection = function(self, entry, status)
+    self.format_selection_mode = false
+    self:preview_fn(entry, status)
+  end
+  
+  return previewer
+end
+
 --- Main entry point of the picker
 --- @param opts any
 M.picker = function(opts)
   opts = opts or {}
   local ft_options = M.config.ft[vim.bo.filetype] or M.config.ft.default
+  
+  local custom_previewer = format_previewer(opts)
   
   pickers
     .new(opts, {
@@ -395,13 +488,69 @@ M.picker = function(opts)
         entry_maker = make_entry,
       },
       sorter = conf.generic_sorter(opts),
-      previewer = previewers.display_content.new(opts),
+      previewer = custom_previewer,
       attach_mappings = function(prompt_bufnr, map)
-        -- Default action shows format selection after closing picker
+        -- Create key mappings for format selection
+        local function handle_format_selection(entry, picker)
+          local citekey = entry.value.citekey
+          local filetype = vim.bo.filetype
+          local formats = get_available_formats(citekey, filetype)
+          
+          -- If there's only one format, use it directly
+          if #formats == 1 then
+            actions.close(prompt_bufnr)
+            insert_citation(formats[1].format, entry, ft_options.locate_bib)
+            return
+          end
+          
+          -- Enter format selection mode in the preview panel
+          custom_previewer:enter_format_selection(entry, picker.previewer.state, formats)
+          
+          -- Add temporary key mappings for format selection
+          for i, format in ipairs(formats) do
+            local key = tostring(i)
+            
+            -- Create a one-time mapping for the number key
+            vim.api.nvim_buf_set_keymap(prompt_bufnr, 'n', key, '', {
+              callback = function()
+                actions.close(prompt_bufnr)
+                insert_citation(format.format, entry, ft_options.locate_bib)
+              end,
+              noremap = true,
+              silent = true,
+            })
+            
+            vim.api.nvim_buf_set_keymap(prompt_bufnr, 'i', key, '', {
+              callback = function()
+                actions.close(prompt_bufnr)
+                insert_citation(format.format, entry, ft_options.locate_bib)
+              end,
+              noremap = true,
+              silent = true,
+            })
+          end
+          
+          -- Add mapping to exit format selection mode
+          vim.api.nvim_buf_set_keymap(prompt_bufnr, 'n', '<Esc>', '', {
+            callback = function()
+              custom_previewer:exit_format_selection(entry, picker.previewer.state)
+              -- Remove the number key mappings
+              for i = 1, #formats do
+                vim.api.nvim_buf_del_keymap(prompt_bufnr, 'n', tostring(i))
+                vim.api.nvim_buf_del_keymap(prompt_bufnr, 'i', tostring(i))
+              end
+              vim.api.nvim_buf_del_keymap(prompt_bufnr, 'n', '<Esc>')
+            end,
+            noremap = true,
+            silent = true,
+          })
+        end
+        
+        -- Default action enters format selection mode
         actions.select_default:replace(function()
-          actions.close(prompt_bufnr)
           local entry = action_state.get_selected_entry()
-          insert_entry(entry, ft_options.locate_bib)
+          local picker = action_state.get_current_picker(prompt_bufnr)
+          handle_format_selection(entry, picker)
         end)
         
         -- Update the mapping to open PDF or DOI
@@ -418,13 +567,13 @@ M.picker = function(opts)
         map('i', '<C-h>', function()
           vim.api.nvim_echo({
             {"Available Commands:", "Title"},
-            {" <CR>: Insert citation | <C-o>: Open attachment", "None"},
+            {" <CR>: Select format | <C-o>: Open attachment", "None"},
           }, false, {})
         end)
         map('n', '?', function()
           vim.api.nvim_echo({
             {"Available Commands:", "Title"},
-            {" <CR>: Insert citation | o: Open attachment", "None"},
+            {" <CR>: Select format | o: Open attachment", "None"},
           }, false, {})
         end)
         

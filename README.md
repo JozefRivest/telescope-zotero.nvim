@@ -61,17 +61,24 @@ When the telescope picker is open, the following key mappings are available:
 
 | Key | Mode | Description |
 |-----|------|-------------|
-| `<CR>` | Normal/Insert | Insert citation (shows format selection after closing) |
+| `<CR>` | Normal/Insert | Show citation format options in the preview panel |
 | `<C-o>` | Insert | Open attachment (PDF or DOI) |
 | `o` | Normal | Open attachment (PDF or DOI) |
 | `<C-h>` | Insert | Show help with available commands |
 | `?` | Normal | Show help with available commands |
 
-When you press Enter to select a citation, a format selection dialog will appear if multiple formats are available for your current filetype:
+### Format Selection
 
-- For Quarto/Markdown files: Choose between `@citekey` and `[@citekey]`
-- For Typst files: Choose between `@citekey` and `#cite(<citekey>)`
-- For LaTeX/TeX files: Automatically inserts `\cite{citekey}`
+When you press Enter on a citation, the preview panel will change to format selection mode:
+
+1. The available formats will be displayed with numbers (1, 2, etc.)
+2. Press the corresponding number key to insert that format
+3. Press Esc to cancel and return to the normal preview
+
+Available formats by filetype:
+- For Quarto/Markdown files: `@citekey` and `[@citekey]`
+- For Typst files: `@citekey` and `#cite(<citekey>)`
+- For LaTeX/TeX files: `\cite{citekey}`
 
 ## Demo
 
