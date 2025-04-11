@@ -9,6 +9,7 @@
 ### Bug Fixes
 
 * fix error when processing creators with missing firstName field
+* fix highlighting function in preview buffer
 
 ## [1.5.2](https://github.com/jmbuhr/telescope-zotero.nvim/compare/v1.5.1...v1.5.2) (2025-02-27)
 

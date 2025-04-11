@@ -344,7 +344,10 @@ local function make_entry(pre_entry)
         elseif i <= 2 or i == #formats - 2 or i == #formats - 1 then
           vim.api.nvim_buf_add_highlight(bufnr, ns_id, 'Title', i-1, 0, -1)
         elseif line:match("^%w+:") then
-          vim.api.nvim_buf_add_highlight(bufnr, ns_id, 'Identifier', i-1, 0, line:find(":"))
+          local colon_pos = line:find(":")
+          if colon_pos then
+            vim.api.nvim_buf_add_highlight(bufnr, ns_id, 'Identifier', i-1, 0, colon_pos)
+          end
         end
       end
     end,
