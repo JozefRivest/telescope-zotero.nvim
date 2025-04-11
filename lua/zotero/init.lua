@@ -8,6 +8,30 @@ local actions = require 'telescope.actions'
 local bib = require 'zotero.bib'
 local database = require 'zotero.database'
 
+-- Create a custom previewer for wrapped text
+local function create_wrapped_previewer(opts)
+  -- Create a standard previewer
+  local previewer = previewers.display_content.new(opts)
+  
+  -- Save the original setup function
+  local original_setup = previewer.setup
+  
+  -- Override the setup function to enable text wrapping
+  previewer.setup = function(self, entry, status)
+    -- First call the original setup
+    original_setup(self, entry, status)
+    
+    -- Then enable text wrapping options
+    if status and status.preview_win and vim.api.nvim_win_is_valid(status.preview_win) then
+      vim.wo[status.preview_win].wrap = true
+      vim.wo[status.preview_win].linebreak = true
+      vim.wo[status.preview_win].breakindent = true
+    end
+  end
+  
+  return previewer
+end
+
 local M = {}
 
 local default_opts = {
@@ -287,8 +311,8 @@ local function make_entry(pre_entry)
       -- Gather all available citation formats
       local formats = {
         -- Add header line for citation formats section
-        "Available Citation Formats (press ENTER to select):",
-        "-----------------------------------------------",
+        "Citation Formats (press ENTER to select):",
+        "-------------------------------------",
         ""
       }
       
@@ -360,34 +384,7 @@ local function make_entry(pre_entry)
   }
 end
 
--- Format selection is now handled by vim.ui.select
-
--- Instead of using a custom popup, let's directly use vim.ui.select which works in more environments
-local function select_citation_format(entry, formats, ft_options)
-  -- If there's only one format, use it directly
-  if #formats == 1 then
-    insert_citation(formats[1].format, entry, ft_options.locate_bib)
-    return
-  end
-  
-  -- Format the options for better visibility
-  local formatted_items = {}
-  for i, format in ipairs(formats) do
-    formatted_items[i] = string.format("%d. %s → %s", i, format.label, format.format)
-  end
-  
-  -- Show the vim.ui.select popup
-  vim.ui.select(formats, {
-    prompt = 'Select citation format:',
-    format_item = function(item, i)
-      return formatted_items[i]
-    end
-  }, function(choice)
-    if choice then
-      insert_citation(choice.format, entry, ft_options.locate_bib)
-    end
-  end)
-end
+-- Format selection is now handled directly in the picker's default action
 
 --- Main entry point of the picker
 --- @param opts any
@@ -395,19 +392,8 @@ M.picker = function(opts)
   opts = opts or {}
   local ft_options = M.config.ft[vim.bo.filetype] or M.config.ft.default
   
-  -- Create a custom previewer that enables text wrapping
-  local wrapped_previewer = previewers.display_content.new(opts)
-  
-  -- Extend the previewer to enable text wrapping
-  local original_setup = wrapped_previewer.setup
-  wrapped_previewer.setup = function(self, entry, status)
-    original_setup(self, entry, status)
-    
-    -- Enable text wrapping in the preview window
-    vim.api.nvim_win_set_option(status.preview_win, 'wrap', true)
-    vim.api.nvim_win_set_option(status.preview_win, 'linebreak', true)
-    vim.api.nvim_win_set_option(status.preview_win, 'breakindent', true)
-  end
+  -- Create a wrapped text previewer
+  local wrapped_previewer = create_wrapped_previewer(opts)
   
   pickers
     .new(opts, {
@@ -419,7 +405,7 @@ M.picker = function(opts)
       sorter = conf.generic_sorter(opts),
       previewer = wrapped_previewer,
       attach_mappings = function(prompt_bufnr, map)
-        -- Default action: use vim.ui.select for format selection
+        -- Default action: show citation format selection directly
         actions.select_default:replace(function()
           local entry = action_state.get_selected_entry()
           local citekey = entry.value.citekey
@@ -429,8 +415,25 @@ M.picker = function(opts)
           -- Close telescope picker
           actions.close(prompt_bufnr)
           
-          -- Show format selection using vim.ui.select
-          select_citation_format(entry, formats, ft_options)
+          -- If there's only one format, use it directly
+          if #formats == 1 then
+            insert_citation(formats[1].format, entry, ft_options.locate_bib)
+            return
+          end
+          
+          -- Otherwise, use the simplest possible selection UI
+          local choices = {}
+          for i, format in ipairs(formats) do
+            table.insert(choices, i .. ". " .. format.label .. " → " .. format.format)
+          end
+          
+          vim.ui.select(choices, {
+            prompt = "Select citation format:",
+          }, function(choice, idx)
+            if idx then
+              insert_citation(formats[idx].format, entry, ft_options.locate_bib)
+            end
+          end)
         end)
         
         -- Update the mapping to open PDF or DOI
