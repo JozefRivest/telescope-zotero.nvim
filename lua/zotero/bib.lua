@@ -90,36 +90,36 @@ M.entry_to_bib_entry = function(entry)
   if item.creators then
     local seen_creators = {}
     local author_list = {}
+    local creators_by_type = {
+      author = {},
+      editor = {},
+    }
 
+    -- First, sort creators by type
     for _, creator in ipairs(item.creators) do
       local creator_key = (creator.lastName or '') .. '|' .. (creator.firstName or '')
       if not seen_creators[creator_key] then
         seen_creators[creator_key] = true
-        table.insert(author_list, (creator.lastName or '') .. ', ' .. (creator.firstName or ''))
+
+        -- Add to appropriate type list
+        if creator.creatorType == 'author' then
+          table.insert(creators_by_type.author, creator_key)
+          table.insert(author_list, (creator.lastName or '') .. ', ' .. (creator.firstName or ''))
+        elseif creator.creatorType == 'editor' then
+          table.insert(creators_by_type.editor, creator_key)
+        end
       end
     end
 
     -- Process authors
-    if creators_by_type['author'] and #creators_by_type['author'] > 0 then
-      local author_list = {}
-      for _, creator_key in ipairs(creators_by_type['author']) do
-        local lastName, firstName = creator_key:match '([^|]+)|(.+)'
-        if lastName and firstName then
-          table.insert(author_list, lastName .. ', ' .. firstName)
-        elseif lastName then
-          table.insert(author_list, lastName)
-        end
-      end
-
-      if #author_list > 0 then
-        bib_entry = bib_entry .. '  author = {' .. table.concat(author_list, ' and ') .. '},\n'
-      end
+    if #author_list > 0 then
+      bib_entry = bib_entry .. '  author = {' .. table.concat(author_list, ' and ') .. '},\n'
     end
 
     -- Process editors
-    if creators_by_type['editor'] and #creators_by_type['editor'] > 0 then
+    if #creators_by_type.editor > 0 then
       local editor_list = {}
-      for _, creator_key in ipairs(creators_by_type['editor']) do
+      for _, creator_key in ipairs(creators_by_type.editor) do
         local lastName, firstName = creator_key:match '([^|]+)|(.+)'
         if lastName and firstName then
           table.insert(editor_list, lastName .. ', ' .. firstName)
@@ -131,8 +131,6 @@ M.entry_to_bib_entry = function(entry)
       if #editor_list > 0 then
         bib_entry = bib_entry .. '  editor = {' .. table.concat(editor_list, ' and ') .. '},\n'
       end
-    if #author_list > 0 then
-      bib_entry = bib_entry .. '  author = {' .. table.concat(author_list, ' and ') .. '},\n'
     end
   end
 
