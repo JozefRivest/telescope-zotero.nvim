@@ -236,30 +236,8 @@ local function insert_citation(format, entry, locate_bib_fn)
   append_to_bib(entry, locate_bib_fn)
 end
 
--- Function to handle the insertion of a citation
-local function insert_entry(entry, locate_bib_fn)
-  local citekey = entry.value.citekey
-  local filetype = vim.bo.filetype
-  local formats = get_available_formats(citekey, filetype)
-  
-  -- If there's only one format, use it directly
-  if #formats == 1 then
-    insert_citation(formats[1].format, entry, locate_bib_fn)
-    return
-  end
-  
-  -- Otherwise show selection UI
-  vim.ui.select(formats, {
-    prompt = 'Choose citation format:',
-    format_item = function(item)
-      return item.label .. ' → ' .. item.format
-    end,
-  }, function(selected)
-    if selected then
-      insert_citation(selected.format, entry, locate_bib_fn)
-    end
-  end)
-end
+-- Function to handle the insertion of a citation is now implemented
+-- directly in the picker action using our FormatSelectionPopup
 
 local function extract_year(date)
   local year = date:match '(%d%d%d%d)'
