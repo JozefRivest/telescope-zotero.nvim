@@ -19,45 +19,16 @@ local default_opts = {
   -- locate_bib can be a string or a function
   ft = {
     quarto = {
+      -- Default formatter (now returns a string rather than using vim.ui.select)
       insert_key_formatter = function(citekey)
-        local choices = {
-          { label = '@citation', format = '@' .. citekey },
-          { label = '[[@citation]]', format = '[@' .. citekey .. ']' },
-        }
-
-        vim.ui.select(choices, {
-          prompt = 'Choose Quarto citation format:',
-          format_item = function(choice)
-            return choice.label
-          end,
-        }, function(selected)
-          if selected then
-            -- Insert the chosen citation format
-            vim.api.nvim_put({ selected.format }, '', false, true)
-          end
-        end)
+        return '@' .. citekey
       end,
       locate_bib = bib.locate_quarto_bib,
     },
     typst = {
+      -- Default formatter (now returns a string rather than using vim.ui.select)
       insert_key_formatter = function(citekey)
-        -- Prompt the user to choose between @citation and #cite(<citation>)
-        local choices = {
-          { label = '@citation', format = '@' .. citekey },
-          { label = '#cite(<citation>)', format = '#cite(<' .. citekey .. '>)' },
-        }
-
-        vim.ui.select(choices, {
-          prompt = 'Choose Typst citation format:',
-          format_item = function(choice)
-            return choice.label
-          end,
-        }, function(selected)
-          if selected then
-            -- Insert the chosen citation format
-            vim.api.nvim_put({ selected.format }, '', false, true)
-          end
-        end)
+        return '@' .. citekey
       end,
       locate_bib = bib.locate_typst_bib,
     },
@@ -282,14 +253,14 @@ local function make_entry(pre_entry)
       -- Gather all available citation formats
       local formats = {
         -- Add header line for citation formats section
-        "Available Citation Formats:",
-        "------------------------",
+        "Available Citation Formats (use <C-h> to see keyboard shortcuts):",
+        "-----------------------------------------------------------",
       }
       
       -- Add formats for all supported filetypes
       local ft_names = {
-        quarto = "Quarto",
-        typst = "Typst",
+        quarto = "Quarto (Press <C-q> then 1 or 2)",
+        typst = "Typst (Press <C-t> then 1 or 2)",
         tex = "LaTeX/TeX",
         plaintex = "PlainTeX",
         default = "Default"
@@ -359,9 +330,17 @@ end
 M.picker = function(opts)
   opts = opts or {}
   local ft_options = M.config.ft[vim.bo.filetype] or M.config.ft.default
+  -- Create a more descriptive title based on filetype
+  local title_suffix = ""
+  if vim.bo.filetype == "quarto" or vim.bo.filetype == "markdown" then
+    title_suffix = " (Press <C-q> for format options)"
+  elseif vim.bo.filetype == "typst" then
+    title_suffix = " (Press <C-t> for format options)"
+  end
+  
   pickers
     .new(opts, {
-      prompt_title = 'Zotero library',
+      prompt_title = 'Zotero library' .. title_suffix,
       finder = finders.new_table {
         results = get_items(),
         entry_maker = make_entry,
@@ -369,11 +348,121 @@ M.picker = function(opts)
       sorter = conf.generic_sorter(opts),
       previewer = previewers.display_content.new(opts),
       attach_mappings = function(prompt_bufnr, map)
+        -- Function to directly insert a citation with a specific format
+        local function insert_citation_with_format(format_function)
+          return function()
+            actions.close(prompt_bufnr)
+            local entry = action_state.get_selected_entry()
+            local citekey = entry.value.citekey
+            
+            -- Get the formatted citation
+            local citation_text
+            if type(format_function) == "function" then
+              citation_text = format_function(citekey)
+            else
+              citation_text = format_function
+            end
+            
+            -- Insert the text directly
+            vim.api.nvim_put({citation_text}, '', false, true)
+            
+            -- Update the bibliography file
+            local locate_bib_fn = ft_options.locate_bib
+            local bib_path = nil
+            if type(locate_bib_fn) == 'string' then
+              bib_path = locate_bib_fn
+            elseif type(locate_bib_fn) == 'function' then
+              bib_path = locate_bib_fn()
+            end
+            
+            if bib_path == nil then
+              vim.notify_once('Could not find a bibliography file', vim.log.levels.WARN)
+              return
+            end
+            
+            bib_path = vim.fn.expand(bib_path)
+            
+            -- Check if already in the bib file
+            for line in io.lines(bib_path) do
+              if string.match(line, '^@') and string.match(line, citekey) then
+                return
+              end
+            end
+            
+            local bib_entry = bib.entry_to_bib_entry(entry)
+            
+            -- Append the entry to the bib file
+            local file = io.open(bib_path, 'a')
+            if file == nil then
+              vim.notify('Could not open ' .. bib_path .. ' for appending', vim.log.levels.ERROR)
+              return
+            end
+            file:write(bib_entry)
+            file:close()
+            vim.print('wrote ' .. citekey .. ' to ' .. bib_path)
+          end
+        end
+        
+        -- Default action - uses the current filetype's default formatter
         actions.select_default:replace(function()
           actions.close(prompt_bufnr)
           local entry = action_state.get_selected_entry()
           insert_entry(entry, ft_options.insert_key_formatter, ft_options.locate_bib)
         end)
+        
+        -- Format selection mappings with descriptions in the status line
+        local filetype = vim.bo.filetype
+        
+        -- Quarto specific formats
+        if filetype == "quarto" or filetype == "markdown" then
+          -- <C-q>1 for @citation format
+          map('i', '<C-q>1', insert_citation_with_format(function(citekey) return '@' .. citekey end))
+          map('n', '<C-q>1', insert_citation_with_format(function(citekey) return '@' .. citekey end))
+          
+          -- <C-q>2 for [@citation] format
+          map('i', '<C-q>2', insert_citation_with_format(function(citekey) return '[@' .. citekey .. ']' end))
+          map('n', '<C-q>2', insert_citation_with_format(function(citekey) return '[@' .. citekey .. ']' end))
+          
+          -- Display available format key mappings
+          vim.api.nvim_buf_set_keymap(prompt_bufnr, 'i', '<C-q>', '', {
+            callback = function()
+              vim.api.nvim_echo({
+                {"Quarto Format Options: ", "Title"},
+                {"<C-q>1: @citation | ", "None"},
+                {"<C-q>2: [@citation]", "None"},
+              }, false, {})
+            end,
+            desc = "Show Quarto citation format options",
+            noremap = true,
+            silent = true,
+          })
+        end
+        
+        -- Typst specific formats
+        if filetype == "typst" then
+          -- <C-t>1 for @citation format
+          map('i', '<C-t>1', insert_citation_with_format(function(citekey) return '@' .. citekey end))
+          map('n', '<C-t>1', insert_citation_with_format(function(citekey) return '@' .. citekey end))
+          
+          -- <C-t>2 for #cite(<citation>) format
+          map('i', '<C-t>2', insert_citation_with_format(function(citekey) return '#cite(<' .. citekey .. '>)' end))
+          map('n', '<C-t>2', insert_citation_with_format(function(citekey) return '#cite(<' .. citekey .. '>)' end))
+          
+          -- Display available format key mappings
+          vim.api.nvim_buf_set_keymap(prompt_bufnr, 'i', '<C-t>', '', {
+            callback = function()
+              vim.api.nvim_echo({
+                {"Typst Format Options: ", "Title"},
+                {"<C-t>1: @citation | ", "None"},
+                {"<C-t>2: #cite(<citation>)", "None"},
+              }, false, {})
+            end,
+            desc = "Show Typst citation format options",
+            noremap = true,
+            silent = true,
+          })
+        end
+        
         -- Update the mapping to open PDF or DOI
         map('i', '<C-o>', function()
           local entry = action_state.get_selected_entry()
@@ -383,6 +472,39 @@ M.picker = function(opts)
           local entry = action_state.get_selected_entry()
           open_attachment(entry.value)
         end)
+        
+        -- Add help mapping to show available commands
+        map('i', '<C-h>', function()
+          local filetype = vim.bo.filetype
+          local format_help = ""
+          
+          if filetype == "quarto" or filetype == "markdown" then
+            format_help = " | <C-q>: Quarto formats"
+          elseif filetype == "typst" then
+            format_help = " | <C-t>: Typst formats"
+          end
+          
+          vim.api.nvim_echo({
+            {"Available Commands:", "Title"},
+            {" <CR>: Insert with default format | <C-o>: Open attachment" .. format_help, "None"},
+          }, false, {})
+        end)
+        map('n', '?', function()
+          local filetype = vim.bo.filetype
+          local format_help = ""
+          
+          if filetype == "quarto" or filetype == "markdown" then
+            format_help = " | <C-q>: Quarto formats"
+          elseif filetype == "typst" then
+            format_help = " | <C-t>: Typst formats"
+          end
+          
+          vim.api.nvim_echo({
+            {"Available Commands:", "Title"},
+            {" <CR>: Insert with default format | o: Open attachment" .. format_help, "None"},
+          }, false, {})
+        end)
+        
         return true
       end,
     })

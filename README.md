@@ -15,7 +15,8 @@ via this new plugin.
 
 - Search your Zotero library directly from Neovim
 - Insert citations in the appropriate format for your filetype (LaTeX, Quarto, Typst)
-- Preview citation formats in the telescope UI
+- Preview all available citation formats in the telescope UI
+- Select different citation formats directly with keyboard shortcuts
 - Open PDFs and DOI links directly from the picker
 - Automatically add references to your bibliography file
 
@@ -53,6 +54,32 @@ Add to your telescope config, e.g. in lazy.nvim
 ```
 
 Default options: <https://github.com/jmbuhr/telescope-zotero.nvim/blob/main/lua/zotero/init.lua#L12>
+
+## Key Mappings
+
+When the telescope picker is open, the following key mappings are available:
+
+| Key | Mode | Description |
+|-----|------|-------------|
+| `<CR>` | Normal/Insert | Insert citation with default format for current filetype |
+| `<C-o>` | Insert | Open attachment (PDF or DOI) |
+| `o` | Normal | Open attachment (PDF or DOI) |
+| `<C-h>` | Insert | Show help with available commands |
+| `?` | Normal | Show help with available commands |
+
+For Quarto/Markdown files:
+| Key | Mode | Description |
+|-----|------|-------------|
+| `<C-q>1` | Normal/Insert | Insert citation with `@citekey` format |
+| `<C-q>2` | Normal/Insert | Insert citation with `[@citekey]` format |
+| `<C-q>` | Insert | Show Quarto format options |
+
+For Typst files:
+| Key | Mode | Description |
+|-----|------|-------------|
+| `<C-t>1` | Normal/Insert | Insert citation with `@citekey` format |
+| `<C-t>2` | Normal/Insert | Insert citation with `#cite(<citekey>)` format |
+| `<C-t>` | Insert | Show Typst format options |
 
 ## Demo
 
