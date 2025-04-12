@@ -494,7 +494,12 @@ end
 --- @param opts any
 M.picker = function(opts)
   opts = opts or {}
-  local ft_options = M.config.ft[vim.bo.filetype] or M.config.ft.default
+
+  -- Store the original buffer's filetype before opening telescope
+  local original_filetype = vim.bo.filetype
+  vim.notify('Original buffer filetype: ' .. original_filetype, vim.log.levels.INFO)
+
+  local ft_options = M.config.ft[original_filetype] or M.config.ft.default
 
   pickers
     .new(opts, {
@@ -510,18 +515,17 @@ M.picker = function(opts)
         actions.select_default:replace(function()
           local entry = action_state.get_selected_entry()
           local citekey = entry.value.citekey
-          local filetype = vim.bo.filetype
 
-          -- Debug current filetype
-          vim.notify('Current filetype: ' .. filetype, vim.log.levels.INFO)
+          -- Use the original filetype instead of the current buffer's filetype
+          vim.notify('Using original filetype: ' .. original_filetype, vim.log.levels.INFO)
 
-          -- Force filetype to quarto for testing if it's not detected correctly
-          if filetype == '' then
-            vim.notify("Empty filetype detected, forcing to 'quarto'", vim.log.levels.WARN)
-            filetype = 'quarto'
+          -- Use quarto as default if original_filetype is empty or not recognized
+          if original_filetype == '' then
+            vim.notify("Empty original filetype, defaulting to 'quarto'", vim.log.levels.WARN)
+            original_filetype = 'quarto'
           end
 
-          local formats = get_available_formats(citekey, filetype)
+          local formats = get_available_formats(citekey, original_filetype)
 
           -- Close the picker first
           actions.close(prompt_bufnr)
