@@ -385,8 +385,7 @@ function FormatSelectionPopup.new(_, formats, on_select, parent_win)
   }
 
   local popup = Popup(popup_options)
-  local _ = popup -- Ensure popup is used to prevent unused variable warning
-  
+
   -- Set up the popup content
   popup:mount()
 
@@ -456,9 +455,9 @@ end
 M.insert_citation_at_cursor = function(citekey, locate_bib_fn)
   local filetype = vim.bo.filetype
   local formats = get_available_formats(citekey, filetype)
-  
+
   -- Always show format selection for Quarto and Typst, or when multiple formats exist
-  if filetype == "quarto" or filetype == "typst" or #formats > 1 then
+  if filetype == 'quarto' or filetype == 'typst' or #formats > 1 then
     -- Show selection UI
     vim.ui.select(formats, {
       prompt = 'Choose citation format:',
@@ -480,20 +479,6 @@ M.insert_citation_at_cursor = function(citekey, locate_bib_fn)
     local entry = { value = { citekey = citekey } }
     append_to_bib(entry, locate_bib_fn)
   end
-end
-  vim.ui.select(formats, {
-    prompt = 'Choose citation format:',
-    format_item = function(item)
-      return item.label .. ' → ' .. item.format
-    end,
-  }, function(selected)
-    if selected then
-      vim.api.nvim_put({ selected.format }, '', false, true)
-      -- Create a dummy entry with just the citekey to append to bib
-      local entry = { value = { citekey = citekey } }
-      append_to_bib(entry, locate_bib_fn)
-    end
-  end)
 end
 
 --- Main entry point of the picker
@@ -520,13 +505,13 @@ M.picker = function(opts)
           local formats = get_available_formats(citekey, filetype)
 
           -- Always show the format selection for Quarto and Typst
-          if filetype == "quarto" or filetype == "typst" or #formats > 1 then
+          if filetype == 'quarto' or filetype == 'typst' or #formats > 1 then
             -- Close the picker before showing the format popup
             actions.close(prompt_bufnr)
 
             -- Create the format selection popup
             local current_win = vim.api.nvim_get_current_win()
-            local popup = FormatSelectionPopup.new(_, formats, function(format)
+            local popup = FormatSelectionPopup.new(nil, formats, function(format)
               insert_citation(format, entry, ft_options.locate_bib)
             end, current_win)
           else
