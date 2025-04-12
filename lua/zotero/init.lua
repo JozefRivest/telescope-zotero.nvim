@@ -363,7 +363,7 @@ end
 local FormatSelectionPopup = {}
 FormatSelectionPopup.__index = FormatSelectionPopup
 
-function FormatSelectionPopup.new(entry, formats, on_select, parent_win)
+function FormatSelectionPopup.new(_, formats, on_select, parent_win)
   local popup_options = {
     relative = 'win',
     win = parent_win,
@@ -385,7 +385,8 @@ function FormatSelectionPopup.new(entry, formats, on_select, parent_win)
   }
 
   local popup = Popup(popup_options)
-
+  local _ = popup -- Ensure popup is used to prevent unused variable warning
+  
   -- Set up the popup content
   popup:mount()
 
@@ -455,17 +456,10 @@ end
 M.insert_citation_at_cursor = function(citekey, locate_bib_fn)
   local filetype = vim.bo.filetype
   local formats = get_available_formats(citekey, filetype)
-
-  -- If there's only one format, use it directly
-  if #formats == 1 then
-    vim.api.nvim_put({ formats[1].format }, '', false, true)
-    -- Create a dummy entry with just the citekey to append to bib
-    local entry = { value = { citekey = citekey } }
-    append_to_bib(entry, locate_bib_fn)
-    return
-  end
-
-  -- Otherwise show selection UI
+  
+  -- Always show format selection for Quarto and Typst, or when multiple formats exist
+  if filetype == "quarto" or filetype == "typst" or #formats > 1 then
+    -- Show selection UI
   vim.ui.select(formats, {
     prompt = 'Choose citation format:',
     format_item = function(item)
@@ -504,21 +498,21 @@ M.picker = function(opts)
           local filetype = vim.bo.filetype
           local formats = get_available_formats(citekey, filetype)
 
-          -- If there's only one format, use it directly
-          if #formats == 1 then
+          -- Always show the format selection for Quarto and Typst
+          if filetype == "quarto" or filetype == "typst" or #formats > 1 then
+            -- Close the picker before showing the format popup
+            actions.close(prompt_bufnr)
+
+            -- Create the format selection popup
+            local current_win = vim.api.nvim_get_current_win()
+            local popup = FormatSelectionPopup.new(_, formats, function(format)
+              insert_citation(format, entry, ft_options.locate_bib)
+            end, current_win)
+          else
+            -- For other filetypes with only one format, use it directly
             actions.close(prompt_bufnr)
             insert_citation(formats[1].format, entry, ft_options.locate_bib)
-            return
           end
-
-          -- Otherwise show the format selection popup
-          actions.close(prompt_bufnr)
-
-          -- Create the format selection popup
-          local current_win = vim.api.nvim_get_current_win()
-          local popup = FormatSelectionPopup.new(entry, formats, function(format)
-            insert_citation(format, entry, ft_options.locate_bib)
-          end, current_win)
         end)
 
         -- Update the mapping to open PDF or DOI
