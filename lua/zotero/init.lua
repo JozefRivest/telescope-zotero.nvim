@@ -208,10 +208,13 @@ end
 local function get_available_formats(citekey, filetype)
   local formats = {}
 
+  -- Debug the called filetype
+  vim.notify('Getting formats for filetype: ' .. filetype, vim.log.levels.INFO)
+
   if filetype == 'quarto' or filetype == 'markdown' then
     formats = {
       { label = '@citation', format = '@' .. citekey },
-      { label = '[[@citation]]', format = '[[@' .. citekey .. ']]' },
+      { label = '[@citation]', format = '[@' .. citekey .. ']' },
     }
   elseif filetype == 'typst' then
     formats = {
@@ -226,6 +229,12 @@ local function get_available_formats(citekey, filetype)
     formats = {
       { label = '@citation', format = '@' .. citekey },
     }
+  end
+
+  -- Debug the available formats
+  vim.notify('Found ' .. #formats .. ' formats', vim.log.levels.INFO)
+  for i, fmt in ipairs(formats) do
+    vim.notify('Format ' .. i .. ': ' .. fmt.label .. ' → ' .. fmt.format, vim.log.levels.INFO)
   end
 
   return formats
@@ -502,13 +511,20 @@ M.picker = function(opts)
           local entry = action_state.get_selected_entry()
           local citekey = entry.value.citekey
           local filetype = vim.bo.filetype
+
+          -- Debug current filetype
+          vim.notify('Current filetype: ' .. filetype, vim.log.levels.INFO)
+
+          -- Force filetype to quarto for testing if it's not detected correctly
+          if filetype == '' then
+            vim.notify("Empty filetype detected, forcing to 'quarto'", vim.log.levels.WARN)
+            filetype = 'quarto'
+          end
+
           local formats = get_available_formats(citekey, filetype)
 
           -- Close the picker first
           actions.close(prompt_bufnr)
-
-          -- Debug notification to see what's happening
-          vim.notify('Selected citation with citekey: ' .. citekey .. ', filetype: ' .. filetype, vim.log.levels.INFO)
 
           -- Force showing the format selection popup for all filetypes
           local current_win = vim.api.nvim_get_current_win()
