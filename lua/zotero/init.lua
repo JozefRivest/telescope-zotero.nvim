@@ -504,21 +504,17 @@ M.picker = function(opts)
           local filetype = vim.bo.filetype
           local formats = get_available_formats(citekey, filetype)
 
-          -- Always show the format selection for Quarto and Typst
-          if filetype == 'quarto' or filetype == 'typst' or #formats > 1 then
-            -- Close the picker before showing the format popup
-            actions.close(prompt_bufnr)
+          -- Close the picker first
+          actions.close(prompt_bufnr)
 
-            -- Create the format selection popup
-            local current_win = vim.api.nvim_get_current_win()
-            local popup = FormatSelectionPopup.new(nil, formats, function(format)
-              insert_citation(format, entry, ft_options.locate_bib)
-            end, current_win)
-          else
-            -- For other filetypes with only one format, use it directly
-            actions.close(prompt_bufnr)
-            insert_citation(formats[1].format, entry, ft_options.locate_bib)
-          end
+          -- Debug notification to see what's happening
+          vim.notify('Selected citation with citekey: ' .. citekey .. ', filetype: ' .. filetype, vim.log.levels.INFO)
+
+          -- Force showing the format selection popup for all filetypes
+          local current_win = vim.api.nvim_get_current_win()
+          local popup = FormatSelectionPopup.new(nil, formats, function(format)
+            insert_citation(format, entry, ft_options.locate_bib)
+          end, current_win)
         end)
 
         -- Update the mapping to open PDF or DOI
