@@ -237,31 +237,6 @@ local function insert_citation(format, entry, locate_bib_fn)
   append_to_bib(entry, locate_bib_fn)
 end
 
--- Function to handle the insertion of a citation
-local function insert_entry(entry, locate_bib_fn)
-  local citekey = entry.value.citekey
-  local filetype = vim.bo.filetype
-  local formats = get_available_formats(citekey, filetype)
-
-  -- If there's only one format, use it directly
-  if #formats == 1 then
-    insert_citation(formats[1].format, entry, locate_bib_fn)
-    return
-  end
-
-  -- Otherwise show selection UI
-  vim.ui.select(formats, {
-    prompt = 'Choose citation format:',
-    format_item = function(item)
-      return item.label .. ' → ' .. item.format
-    end,
-  }, function(selected)
-    if selected then
-      insert_citation(selected.format, entry, locate_bib_fn)
-    end
-  end)
-end
-
 local function extract_year(date)
   local year = date:match '(%d%d%d%d)'
   if year ~= nil then
@@ -473,6 +448,37 @@ function FormatSelectionPopup.new(entry, formats, on_select, parent_win)
   end, { buffer = bufnr, noremap = true, silent = true })
 
   return popup
+end
+
+-- Function to directly insert a citation outside of the picker context
+-- This function can be exposed as part of the module API
+M.insert_citation_at_cursor = function(citekey, locate_bib_fn)
+  local filetype = vim.bo.filetype
+  local formats = get_available_formats(citekey, filetype)
+
+  -- If there's only one format, use it directly
+  if #formats == 1 then
+    vim.api.nvim_put({ formats[1].format }, '', false, true)
+    -- Create a dummy entry with just the citekey to append to bib
+    local entry = { value = { citekey = citekey } }
+    append_to_bib(entry, locate_bib_fn)
+    return
+  end
+
+  -- Otherwise show selection UI
+  vim.ui.select(formats, {
+    prompt = 'Choose citation format:',
+    format_item = function(item)
+      return item.label .. ' → ' .. item.format
+    end,
+  }, function(selected)
+    if selected then
+      vim.api.nvim_put({ selected.format }, '', false, true)
+      -- Create a dummy entry with just the citekey to append to bib
+      local entry = { value = { citekey = citekey } }
+      append_to_bib(entry, locate_bib_fn)
+    end
+  end)
 end
 
 --- Main entry point of the picker
