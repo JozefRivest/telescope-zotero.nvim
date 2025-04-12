@@ -460,6 +460,27 @@ M.insert_citation_at_cursor = function(citekey, locate_bib_fn)
   -- Always show format selection for Quarto and Typst, or when multiple formats exist
   if filetype == "quarto" or filetype == "typst" or #formats > 1 then
     -- Show selection UI
+    vim.ui.select(formats, {
+      prompt = 'Choose citation format:',
+      format_item = function(item)
+        return item.label .. ' → ' .. item.format
+      end,
+    }, function(selected)
+      if selected then
+        vim.api.nvim_put({ selected.format }, '', false, true)
+        -- Create a dummy entry with just the citekey to append to bib
+        local entry = { value = { citekey = citekey } }
+        append_to_bib(entry, locate_bib_fn)
+      end
+    end)
+  else
+    -- For other filetypes with only one format, use it directly
+    vim.api.nvim_put({ formats[1].format }, '', false, true)
+    -- Create a dummy entry with just the citekey to append to bib
+    local entry = { value = { citekey = citekey } }
+    append_to_bib(entry, locate_bib_fn)
+  end
+end
   vim.ui.select(formats, {
     prompt = 'Choose citation format:',
     format_item = function(item)
