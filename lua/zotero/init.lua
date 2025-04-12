@@ -208,9 +208,6 @@ end
 local function get_available_formats(citekey, filetype)
   local formats = {}
 
-  -- Debug the called filetype
-  vim.notify('Getting formats for filetype: ' .. filetype, vim.log.levels.INFO)
-
   if filetype == 'quarto' or filetype == 'markdown' then
     formats = {
       { label = '@citation', format = '@' .. citekey },
@@ -229,12 +226,6 @@ local function get_available_formats(citekey, filetype)
     formats = {
       { label = '@citation', format = '@' .. citekey },
     }
-  end
-
-  -- Debug the available formats
-  vim.notify('Found ' .. #formats .. ' formats', vim.log.levels.INFO)
-  for i, fmt in ipairs(formats) do
-    vim.notify('Format ' .. i .. ': ' .. fmt.label .. ' → ' .. fmt.format, vim.log.levels.INFO)
   end
 
   return formats
@@ -515,9 +506,6 @@ M.picker = function(opts)
         actions.select_default:replace(function()
           local entry = action_state.get_selected_entry()
           local citekey = entry.value.citekey
-
-          -- Use the original filetype instead of the current buffer's filetype
-          vim.notify('Using original filetype: ' .. original_filetype, vim.log.levels.INFO)
 
           -- Use quarto as default if original_filetype is empty or not recognized
           if original_filetype == '' then
