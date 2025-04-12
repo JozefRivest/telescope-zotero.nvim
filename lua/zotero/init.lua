@@ -211,7 +211,7 @@ local function get_available_formats(citekey, filetype)
   if filetype == 'quarto' or filetype == 'markdown' then
     formats = {
       { label = '@citation', format = '@' .. citekey },
-      { label = '[@citation]', format = '[@' .. citekey .. ']' },
+      { label = '[[@citation]]', format = '[[@' .. citekey .. ']]' },
     }
   elseif filetype == 'typst' then
     formats = {
