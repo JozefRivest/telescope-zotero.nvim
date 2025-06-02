@@ -78,7 +78,7 @@ function M.get_items()
   local sql_items = M.db:eval(query_items)
   local sql_creators = M.db:eval(query_creators)
   local sql_bbt = M.bbt:eval(query_bbt)
-  local sql_bbt_cache = M.bbt:eval(query_bbt_cache)
+  local sql_bbt_cache = pcall(function() return M.bbt:eval(query_bbt_cache) end) and M.bbt:eval(query_bbt_cache) or nil
 
   if sql_items == nil or sql_creators == nil or sql_bbt == nil then
     vim.notify_once('[zotero] could not query database.', vim.log.levels.WARN, {})
