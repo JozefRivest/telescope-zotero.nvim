@@ -29,6 +29,13 @@ local query_bbt = [[
     citationkey
 ]]
 
+local query_bbt_cache = [[
+  SELECT
+    itemKey, bibtex
+  FROM
+    cache
+]]
+
 local query_items = [[
     SELECT
       DISTINCT items.key, items.itemID,
@@ -71,14 +78,22 @@ function M.get_items()
   local sql_items = M.db:eval(query_items)
   local sql_creators = M.db:eval(query_creators)
   local sql_bbt = M.bbt:eval(query_bbt)
+  local sql_bbt_cache = M.bbt:eval(query_bbt_cache)
 
   if sql_items == nil or sql_creators == nil or sql_bbt == nil then
     vim.notify_once('[zotero] could not query database.', vim.log.levels.WARN, {})
     return {}
   end
   local bbt_citekeys = {}
+  local bbt_cached_entries = {}
   for _, v in pairs(sql_bbt) do
     bbt_citekeys[v.itemKey] = v.citationKey
+  end
+  
+  if sql_bbt_cache then
+    for _, v in pairs(sql_bbt_cache) do
+      bbt_cached_entries[v.itemKey] = v.bibtex
+    end
   end
 
   for _, v in pairs(sql_items) do
@@ -111,6 +126,7 @@ function M.get_items()
     local citekey = bbt_citekeys[key]
     if citekey ~= nil then
       item.citekey = citekey
+      item.bbt_bibtex = bbt_cached_entries[key]
       table.insert(items, item)
     end
   end

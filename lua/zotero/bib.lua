@@ -80,9 +80,16 @@ M.locate_tex_bib = function()
   end
 end
 
-M.entry_to_bib_entry = function(entry)
-  local bib_entry = '@'
+M.entry_to_bib_entry = function(entry, use_better_bibtex)
   local item = entry.value
+  
+  -- Use Better BibTeX cached entry if available and enabled
+  if use_better_bibtex and item.bbt_bibtex then
+    return item.bbt_bibtex .. '\n'
+  end
+  
+  -- Fallback to custom formatting
+  local bib_entry = '@'
   local citekey = item.citekey or ''
   bib_entry = bib_entry .. (item.itemType or '') .. '{' .. citekey .. ',\n'
 

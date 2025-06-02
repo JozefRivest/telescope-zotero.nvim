@@ -15,6 +15,7 @@ local default_opts = {
   better_bibtex_db_path = '~/Zotero/better-bibtex.sqlite',
   zotero_storage_path = '~/Zotero/storage',
   pdf_opener = nil,
+  use_better_bibtex = true, -- Use Better BibTeX cached entries when available
   -- specify options for different filetypes
   -- locate_bib can be a string or a function
   ft = {
@@ -191,7 +192,7 @@ local function append_to_bib(entry, locate_bib_fn)
     end
   end
 
-  local bib_entry = bib.entry_to_bib_entry(entry)
+  local bib_entry = bib.entry_to_bib_entry(entry, M.config.use_better_bibtex)
 
   -- otherwise append the entry to the bib file at bib_path
   local file = io.open(bib_path, 'a')
@@ -329,7 +330,7 @@ local function make_entry(pre_entry)
       table.insert(formats, '-------------')
 
       -- Add the BibTeX entry
-      local bib_entry = bib.entry_to_bib_entry(entry)
+      local bib_entry = bib.entry_to_bib_entry(entry, M.config.use_better_bibtex)
       local bib_lines = vim.split(bib_entry, '\n')
 
       -- Combine formats and BibTeX entry
