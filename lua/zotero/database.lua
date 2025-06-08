@@ -65,6 +65,103 @@ local query_creators = [[
       INNER JOIN creatorTypes ON itemCreators.creatorTypeID = creatorTypes.creatorTypeID
     ]]
 
+-- Get BBT cached export for a specific item
+M.get_bbt_cached_entry = function(item_key)
+  if not M.bbt then return nil end
+  
+  -- First check if cache table exists with proper error handling
+  local table_check = [[
+    SELECT name FROM sqlite_master WHERE type='table' AND name='cache'
+  ]]
+  
+  local ok, table_exists = pcall(M.bbt.eval, M.bbt, table_check)
+  if not ok or not table_exists or type(table_exists) ~= 'table' or #table_exists == 0 then
+    -- Table doesn't exist or query failed, return nil to fall back to manual generation
+    return nil
+  end
+  
+  -- Try different possible cache table structures
+  local queries = {
+    -- Original attempt
+    [[
+      SELECT bibTeX FROM cache 
+      WHERE itemKey = ? AND exportNotes = 0
+      ORDER BY dateModified DESC 
+      LIMIT 1
+    ]],
+    -- Alternative without exportNotes filter
+    [[
+      SELECT bibTeX FROM cache 
+      WHERE itemKey = ?
+      ORDER BY dateModified DESC 
+      LIMIT 1
+    ]],
+    -- Check if it's called bibtex instead of bibTeX
+    [[
+      SELECT bibtex FROM cache 
+      WHERE itemKey = ?
+      ORDER BY dateModified DESC 
+      LIMIT 1
+    ]]
+  }
+  
+  for _, query in ipairs(queries) do
+    local query_ok, results = pcall(M.bbt.eval, M.bbt, query, {item_key})
+    if query_ok and results and type(results) == 'table' and results[1] then
+      local entry = results[1].bibTeX or results[1].bibtex
+      if entry and entry ~= '' then
+        return entry
+      end
+    end
+  end
+  
+  return nil
+end
+
+-- Debug function to list BBT database tables
+M.list_bbt_tables = function()
+  if not M.bbt then return {} end
+  
+  local query = [[
+    SELECT name FROM sqlite_master WHERE type='table'
+  ]]
+  
+  local ok, results = pcall(M.bbt.eval, M.bbt, query)
+  if ok and results and type(results) == 'table' then
+    local tables = {}
+    for _, row in ipairs(results) do
+      if row and row.name then
+        table.insert(tables, row.name)
+      end
+    end
+    return tables
+  end
+  
+  return {}
+end
+
+-- Get BBT preferences
+M.get_bbt_preferences = function()
+  if not M.bbt then return {} end
+  
+  local query = [[
+    SELECT name, value FROM 'better-bibtex' 
+    WHERE name IN ('citeKeyFormat', 'exportTitleCase', 'exportBraceProtection')
+  ]]
+  
+  local prefs = {}
+  local ok, results = pcall(M.bbt.eval, M.bbt, query)
+  if ok and results and type(results) == 'table' then
+    for _, row in ipairs(results) do
+      if row and row.name and row.value then
+        prefs[row.name] = row.value
+      end
+    end
+  end
+  
+  return prefs
+end
+
 function M.get_items()
   local items = {}
   local raw_items = {}

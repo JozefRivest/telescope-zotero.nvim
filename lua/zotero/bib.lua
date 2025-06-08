@@ -80,101 +80,191 @@ M.locate_tex_bib = function()
   end
 end
 
-M.entry_to_bib_entry = function(entry)
-  local bib_entry = '@'
+-- BBT item type mappings
+M.bbt_item_type_map = {
+  journalArticle = 'article',
+  book = 'book',
+  bookSection = 'incollection',
+  conferencePaper = 'inproceedings',
+  thesis = 'phdthesis',
+  webpage = 'misc',
+  report = 'techreport',
+  magazineArticle = 'article',
+  newspaperArticle = 'article',
+  manuscript = 'unpublished',
+  patent = 'misc',
+  software = 'misc',
+}
+
+-- BBT field mappings
+M.bbt_field_map = {
+  title = 'title',
+  publicationTitle = 'journal',
+  bookTitle = 'booktitle',
+  year = 'year',
+  DOI = 'doi',
+  url = 'url',
+  abstractNote = 'abstract',
+  volume = 'volume',
+  issue = 'number',
+  pages = 'pages',
+  publisher = 'publisher',
+  place = 'address',
+  ISBN = 'isbn',
+  ISSN = 'issn',
+  language = 'language',
+  archive = 'archive',
+  archiveLocation = 'archiveprefix',
+  libraryCatalog = 'library',
+  callNumber = 'call-number',
+  rights = 'rights',
+  extra = 'note',
+  series = 'series',
+  seriesNumber = 'number',
+  edition = 'edition',
+  numPages = 'pages',
+  shortTitle = 'shorttitle',
+}
+
+-- Clean field values according to BBT standards
+M.clean_field_value = function(value, field_type)
+  if not value or value == '' then
+    return ''
+  end
+
+  -- Remove HTML tags
+  value = value:gsub('<[^>]+>', '')
+
+  -- Handle specific field formatting
+  if field_type == 'doi' then
+    -- Remove URL prefix from DOI
+    value = value:gsub('^https?://[^/]*/?', '')
+    value = value:gsub('^doi:', '')
+  elseif field_type == 'pages' then
+    -- Format page ranges
+    value = value:gsub('%-%-', '--')
+    value = value:gsub('—', '--')
+  elseif field_type == 'url' then
+    -- Clean URL
+    value = value:gsub('^%s+', ''):gsub('%s+$', '')
+  end
+
+  -- Escape special BibTeX characters but preserve LaTeX commands
+  value = value:gsub('([{}])', '\\%1')
+  value = value:gsub('\\\\', '\\')
+
+  return value
+end
+
+-- Enhanced BBT-compatible entry generation
+M.entry_to_bbt_entry = function(entry, bbt_db)
   local item = entry.value
   local citekey = item.citekey or ''
-  bib_entry = bib_entry .. (item.itemType or '') .. '{' .. citekey .. ',\n'
 
-  -- Process creators with deduplication
+  -- First try to get from BBT cache if database available
+  if bbt_db then
+    local ok, database = pcall(require, 'zotero.database')
+    if ok then
+      local bbt_export = database.get_bbt_cached_entry(item.key)
+      if bbt_export and bbt_export ~= '' then
+        return bbt_export .. '\n'
+      end
+    end
+  end
+
+  -- Enhanced manual generation with BBT field mapping
+  local item_type = M.bbt_item_type_map[item.itemType] or item.itemType or 'misc'
+  local bib_entry = '@' .. item_type .. '{' .. citekey .. ',\n'
+
+  -- Process creators with BBT-style formatting
   if item.creators then
     local seen_creators = {}
-    local author_list = {}
-    local creators_by_type = {
-      author = {},
-      editor = {},
-    }
+    local authors = {}
+    local editors = {}
+    local translators = {}
 
-    -- First, sort creators by type
     for _, creator in ipairs(item.creators) do
       local creator_key = (creator.lastName or '') .. '|' .. (creator.firstName or '')
       if not seen_creators[creator_key] then
         seen_creators[creator_key] = true
 
-        -- Add to appropriate type list
+        local name_parts = {}
+        if creator.lastName then
+          table.insert(name_parts, creator.lastName)
+        end
+        if creator.firstName then
+          table.insert(name_parts, creator.firstName)
+        end
+        local full_name = table.concat(name_parts, ', ')
+
         if creator.creatorType == 'author' then
-          table.insert(creators_by_type.author, creator_key)
-          table.insert(author_list, (creator.lastName or '') .. ', ' .. (creator.firstName or ''))
+          table.insert(authors, full_name)
         elseif creator.creatorType == 'editor' then
-          table.insert(creators_by_type.editor, creator_key)
+          table.insert(editors, full_name)
+        elseif creator.creatorType == 'translator' then
+          table.insert(translators, full_name)
         end
       end
     end
 
-    -- Process authors
-    if #author_list > 0 then
-      bib_entry = bib_entry .. '  author = {' .. table.concat(author_list, ' and ') .. '},\n'
+    if #authors > 0 then
+      bib_entry = bib_entry .. '  author = {' .. table.concat(authors, ' and ') .. '},\n'
     end
+    if #editors > 0 then
+      bib_entry = bib_entry .. '  editor = {' .. table.concat(editors, ' and ') .. '},\n'
+    end
+    if #translators > 0 then
+      bib_entry = bib_entry .. '  translator = {' .. table.concat(translators, ' and ') .. '},\n'
+    end
+  end
 
-    -- Process editors
-    if #creators_by_type.editor > 0 then
-      local editor_list = {}
-      for _, creator_key in ipairs(creators_by_type.editor) do
-        local lastName, firstName = creator_key:match '([^|]+)|(.+)'
-        if lastName and firstName then
-          table.insert(editor_list, lastName .. ', ' .. firstName)
-        elseif lastName then
-          table.insert(editor_list, lastName)
-        end
-      end
-
-      if #editor_list > 0 then
-        bib_entry = bib_entry .. '  editor = {' .. table.concat(editor_list, ' and ') .. '},\n'
+  -- Process fields using BBT mapping
+  for zotero_field, bbt_field in pairs(M.bbt_field_map) do
+    local value = item[zotero_field]
+    if value and type(value) == 'string' and value ~= '' then
+      value = M.clean_field_value(value, bbt_field)
+      if value ~= '' then
+        bib_entry = bib_entry .. '  ' .. bbt_field .. ' = {' .. value .. '},\n'
       end
     end
   end
 
-  -- Process all other fields
+  -- Handle remaining fields not in mapping
   for k, v in pairs(item) do
-    if k ~= 'citekey' and k ~= 'itemType' and k ~= 'creators' and k ~= 'attachment' and k ~= 'date' and type(v) == 'string' then
-      -- Format the field based on Better BibTeX expectations
-      local field_name = k
-
-      -- Handle special fields that BBT might format differently
-      if k == 'url' then
-        -- Keep URL as is
-        bib_entry = bib_entry .. '  ' .. field_name .. ' = {' .. v .. '},\n'
-      elseif k == 'DOI' then
-        -- Format DOI without the URL part
-        bib_entry = bib_entry .. '  doi = {' .. v .. '},\n'
-      elseif k == 'abstractNote' then
-        -- Rename to abstract as used in BBT
-        bib_entry = bib_entry .. '  abstract = {' .. v .. '},\n'
-      else
-        bib_entry = bib_entry .. '  ' .. field_name .. ' = {' .. v .. '},\n'
+    if
+      k ~= 'citekey'
+      and k ~= 'itemType'
+      and k ~= 'creators'
+      and k ~= 'attachment'
+      and k ~= 'key'
+      and k ~= 'date'  -- Exclude date field since we only want year
+      and not M.bbt_field_map[k]
+      and type(v) == 'string'
+      and v ~= ''
+    then
+      local cleaned_value = M.clean_field_value(v, k)
+      if cleaned_value ~= '' then
+        bib_entry = bib_entry .. '  ' .. k .. ' = {' .. cleaned_value .. '},\n'
       end
     end
   end
 
-  -- Handle date/year properly
-  if item.date then
-    -- Extract year from date field if not already present
-    if not item.year then
-      local year = string.match(item.date, '(%d%d%d%d)')
-      if year then
-        bib_entry = bib_entry .. '  year = {' .. year .. '},\n'
-      end
-    end
-
-    -- Add date field in ISO format
-    local iso_date = string.match(item.date, '(%d%d%d%d%-%d%d%-%d%d)')
-    if iso_date then
-      bib_entry = bib_entry .. '  date = {' .. iso_date .. '},\n'
-    end
-  end
+  -- Handle date/year with BBT preferences
+  -- Only add year if we don't already have it from item.year
+  -- if item.date and not item.year then
+  --   local year = string.match(item.date, '(%d%d%d%d)')
+  --   if year then
+  --     bib_entry = bib_entry .. '  year = {' .. year .. '},\n'
+  --   end
+  -- end
 
   bib_entry = bib_entry .. '}\n'
   return bib_entry
+end
+
+-- Legacy function for backward compatibility
+M.entry_to_bib_entry = function(entry)
+  return M.entry_to_bbt_entry(entry, nil)
 end
 
 return M

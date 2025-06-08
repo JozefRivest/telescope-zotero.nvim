@@ -191,7 +191,8 @@ local function append_to_bib(entry, locate_bib_fn)
     end
   end
 
-  local bib_entry = bib.entry_to_bib_entry(entry)
+  -- Try BBT export first, fallback to manual generation
+  local bib_entry = bib.entry_to_bbt_entry(entry, database.bbt)
 
   -- otherwise append the entry to the bib file at bib_path
   local file = io.open(bib_path, 'a')
@@ -201,7 +202,18 @@ local function append_to_bib(entry, locate_bib_fn)
   end
   file:write(bib_entry)
   file:close()
-  vim.print('wrote ' .. citekey .. ' to ' .. bib_path)
+  
+  -- Enhanced notification with BBT info
+  local format_type = "manual format"
+  if database.bbt then
+    local tables = database.list_bbt_tables()
+    if #tables > 0 then
+      format_type = "BBT format (tables: " .. table.concat(tables, ", ") .. ")"
+    else
+      format_type = "BBT format (no tables found)"
+    end
+  end
+  vim.print('wrote ' .. citekey .. ' to ' .. bib_path .. ' (' .. format_type .. ')')
 end
 
 -- This function gets the available citation formats for the given filetype
@@ -328,8 +340,8 @@ local function make_entry(pre_entry)
       table.insert(formats, 'BibTeX Entry:')
       table.insert(formats, '-------------')
 
-      -- Add the BibTeX entry
-      local bib_entry = bib.entry_to_bib_entry(entry)
+      -- Add the BibTeX entry using BBT format
+      local bib_entry = bib.entry_to_bbt_entry(entry, database.bbt)
       local bib_lines = vim.split(bib_entry, '\n')
 
       -- Combine formats and BibTeX entry
