@@ -379,12 +379,42 @@ local FormatSelectionPopup = {}
 FormatSelectionPopup.__index = FormatSelectionPopup
 
 function FormatSelectionPopup.new(_, formats, on_select, parent_win)
+  -- Calculate optimal width based on content
+  local function calculate_optimal_width(format_list)
+    local max_width = 0
+    local header_text = 'Press the number key to insert the selected format:'
+    local footer_text = 'Press <Esc> to cancel'
+    local border_text = ' Select Citation Format '
+
+    -- Check header width
+    max_width = math.max(max_width, #header_text)
+
+    -- Check footer width
+    max_width = math.max(max_width, #footer_text)
+
+    -- Check border title width
+    max_width = math.max(max_width, #border_text + 4) -- +4 for border padding
+
+    -- Check each format option width
+    for i, format in ipairs(format_list) do
+      local format_line = string.format('%d. %s → %s', i, format.label, format.format)
+      max_width = math.max(max_width, #format_line)
+    end
+
+    -- Add some padding and ensure minimum width
+    local padding = 8
+    local min_width = 40
+    return math.max(min_width, max_width + padding)
+  end
+
+  local optimal_width = calculate_optimal_width(formats)
+
   local popup_options = {
     relative = 'win',
     win = parent_win,
     position = '50%',
     size = {
-      width = 50,
+      width = optimal_width,
       height = #formats + 6,
     },
     border = {
@@ -403,7 +433,6 @@ function FormatSelectionPopup.new(_, formats, on_select, parent_win)
 
   -- Set up the popup content
   popup:mount()
-
   local bufnr = popup.bufnr
   local lines = {
     'Press the number key to insert the selected format:',
