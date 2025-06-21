@@ -25,12 +25,18 @@ M.locate_quarto_bib = function()
   local root = require('lspconfig.util').root_pattern '_quarto.yml'(fname)
   if root then
     local file = root .. '/_quarto.yml'
-    for line in io.lines(file) do
-      local location = string.match(line, [[bibliography:[ "']*(.+)["' ]*]])
-      if location then
-        M['quarto.cached_bib'] = location
-        return M['quarto.cached_bib']
+    -- Add error handling for file reading
+    local ok, err = pcall(function()
+      for line in io.lines(file) do
+        local location = string.match(line, [[bibliography:[ "']*(.+)["' ]*]])
+        if location then
+          M['quarto.cached_bib'] = location
+          return M['quarto.cached_bib']
+        end
       end
+    end)
+    if not ok then
+      vim.notify('Error reading _quarto.yml: ' .. tostring(err), vim.log.levels.WARN)
     end
   end
 end
@@ -61,6 +67,9 @@ M.locate_typst_bib = function()
 end
 
 M.locate_tex_bib = function()
+  local bufname = vim.api.nvim_buf_get_name(0)
+  local dirname = vim.fn.fnamemodify(bufname, ':h')
+
   local lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
   for _, line in ipairs(lines) do
     -- ignore commented bibliography
@@ -68,13 +77,25 @@ M.locate_tex_bib = function()
     if not comment then
       local location = string.match(line, [[\bibliography{[ "']*([^'"\{\}]+)["' ]*}]])
       if location then
-        return location .. '.bib'
+        local bib_path = location .. '.bib'
+        -- Return absolute path for consistency
+        if not bib_path:match '^/' then
+          bib_path = dirname .. '/' .. bib_path
+        end
+        return bib_path
       end
       -- checking for biblatex
       location = string.match(line, [[\addbibresource{[ "']*([^'"\{\}]+)["' ]*}]])
       if location then
         -- addbibresource optionally allows you to add .bib
-        return location:gsub('.bib', '') .. '.bib'
+        if not location:match '%.bib$' then -- Fixed: removed unnecessary second parameter
+          location = location .. '.bib'
+        end
+        -- Return absolute path for consistency
+        if not location:match '^/' then
+          location = dirname .. '/' .. location
+        end
+        return location
       end
     end
   end
@@ -149,9 +170,10 @@ M.clean_field_value = function(value, field_type)
     value = value:gsub('^%s+', ''):gsub('%s+$', '')
   end
 
-  -- Escape special BibTeX characters but preserve LaTeX commands
-  value = value:gsub('([{}])', '\\%1')
-  value = value:gsub('\\\\', '\\')
+  -- Improved escaping: only escape unescaped braces
+  -- This preserves intentional LaTeX commands while escaping problematic braces
+  value = value:gsub('([^\\])([{}])', '%1\\%2')
+  value = value:gsub('^([{}])', '\\%1') -- Handle braces at start of string
 
   return value
 end
@@ -237,7 +259,7 @@ M.entry_to_bbt_entry = function(entry, bbt_db)
       and k ~= 'creators'
       and k ~= 'attachment'
       and k ~= 'key'
-      and k ~= 'date'  -- Exclude date field since we only want year
+      and k ~= 'date' -- Exclude date field since we only want year
       and not M.bbt_field_map[k]
       and type(v) == 'string'
       and v ~= ''
@@ -249,14 +271,13 @@ M.entry_to_bbt_entry = function(entry, bbt_db)
     end
   end
 
-  -- Handle date/year with BBT preferences
-  -- Only add year if we don't already have it from item.year
-  -- if item.date and not item.year then
-  --   local year = string.match(item.date, '(%d%d%d%d)')
-  --   if year then
-  --     bib_entry = bib_entry .. '  year = {' .. year .. '},\n'
-  --   end
-  -- end
+  -- Handle date/year extraction if year is not already present
+  if not item.year and item.date then
+    local year = string.match(item.date, '(%d%d%d%d)')
+    if year then
+      bib_entry = bib_entry .. '  year = {' .. year .. '},\n'
+    end
+  end
 
   bib_entry = bib_entry .. '}\n'
   return bib_entry

@@ -202,15 +202,15 @@ local function append_to_bib(entry, locate_bib_fn)
   end
   file:write(bib_entry)
   file:close()
-  
+
   -- Enhanced notification with BBT info
-  local format_type = "manual format"
+  local format_type = 'manual format'
   if database.bbt then
     local tables = database.list_bbt_tables()
     if #tables > 0 then
-      format_type = "BBT format (tables: " .. table.concat(tables, ", ") .. ")"
+      format_type = 'BBT format (tables: ' .. table.concat(tables, ', ') .. ')'
     else
-      format_type = "BBT format (no tables found)"
+      format_type = 'BBT format (no tables found)'
     end
   end
   vim.print('wrote ' .. citekey .. ' to ' .. bib_path .. ' (' .. format_type .. ')')
@@ -233,6 +233,9 @@ local function get_available_formats(citekey, filetype)
   elseif filetype == 'tex' or filetype == 'plaintex' then
     formats = {
       { label = '\\cite{citation}', format = '\\cite{' .. citekey .. '}' },
+      { label = '\\parencite{citation}', format = '\\parencite{' .. citekey .. '}' },
+      { label = '\\footcite{citation}', format = '\\footcite{' .. citekey .. '}' },
+      { label = 'citation', format = citekey },
     }
   else
     formats = {
