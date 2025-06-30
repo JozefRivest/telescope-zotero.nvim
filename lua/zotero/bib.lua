@@ -3,6 +3,7 @@
 local M = {}
 
 M.quarto = {}
+M.markdown = {}
 M.tex = {}
 M.typst = {}
 M['quarto.cached_bib'] = nil
@@ -37,6 +38,40 @@ M.locate_quarto_bib = function()
     end)
     if not ok then
       vim.notify('Error reading _quarto.yml: ' .. tostring(err), vim.log.levels.WARN)
+    end
+  end
+end
+
+M.locate_markdown_bib = function()
+  if M['markdown.cached_bib'] then
+    return M['markdown.cached_bib']
+  end
+  local lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
+  for _, line in ipairs(lines) do
+    local location = string.match(line, [[bibliography:[ "']*(.+)["' ]*]])
+    if location then
+      M['markdown.cached_bib'] = location
+      return M['markdown.cached_bib']
+    end
+  end
+  -- no bib locally defined
+  -- test for markdown project-wide definition
+  local fname = vim.api.nvim_buf_get_name(0)
+  local root = require('lspconfig.util').root_pattern '_markdown.yml'(fname)
+  if root then
+    local file = root .. '/_markdown.yml'
+    -- Add error handling for file reading
+    local ok, err = pcall(function()
+      for line in io.lines(file) do
+        local location = string.match(line, [[bibliography:[ "']*(.+)["' ]*]])
+        if location then
+          M['markdown.cached_bib'] = location
+          return M['markdown.cached_bib']
+        end
+      end
+    end)
+    if not ok then
+      vim.notify('Error reading _markdown.yml: ' .. tostring(err), vim.log.levels.WARN)
     end
   end
 end

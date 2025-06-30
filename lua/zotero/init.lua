@@ -25,6 +25,13 @@ local default_opts = {
       end,
       locate_bib = bib.locate_quarto_bib,
     },
+    markdown = {
+      -- Default formatter (now returns a string rather than using vim.ui.select)
+      insert_key_formatter = function(citekey)
+        return '@' .. citekey
+      end,
+      locate_bib = bib.locate_markdown_bib,
+    },
     typst = {
       -- Default formatter (now returns a string rather than using vim.ui.select)
       insert_key_formatter = function(citekey)
@@ -309,6 +316,7 @@ local function make_entry(pre_entry)
       -- Add formats for all supported filetypes
       local ft_names = {
         quarto = 'Quarto',
+        markdown = 'Markdown',
         typst = 'Typst',
         tex = 'LaTeX/TeX',
         plaintex = 'PlainTeX',
@@ -320,7 +328,7 @@ local function make_entry(pre_entry)
         local format_line = ft_names[ft_name] .. ': '
 
         -- Handle formatter functions that return UI selectors
-        if ft_name == 'quarto' then
+        if ft_name == 'quarto' or 'markdown' then
           format_line = format_line .. '@' .. citekey .. ' or [@' .. citekey .. ']'
         elseif ft_name == 'typst' then
           format_line = format_line .. '@' .. citekey .. ' or #cite(<' .. citekey .. '>)'
