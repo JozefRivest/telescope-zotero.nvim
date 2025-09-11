@@ -239,7 +239,7 @@ local function get_available_formats(citekey, filetype)
     }
   elseif filetype == 'tex' or filetype == 'plaintex' then
     formats = {
-      { label = '\\textcite{citation}', format = '\\cite{' .. citekey .. '}' },
+      { label = '\\textcite{citation}', format = '\\textcite{' .. citekey .. '}' },
       { label = '\\parencite{citation}', format = '\\parencite{' .. citekey .. '}' },
       { label = '\\footcite{citation}', format = '\\footcite{' .. citekey .. '}' },
       { label = 'citation', format = citekey },
