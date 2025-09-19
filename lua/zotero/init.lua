@@ -45,6 +45,12 @@ local default_opts = {
       end,
       locate_bib = bib.locate_tex_bib,
     },
+    rnoweb = {
+      insert_key_formatter = function(citekey)
+        return '\\cite{' .. citekey .. '}'
+      end,
+      locate_bib = bib.locate_tex_bib,
+    },
     plaintex = {
       insert_key_formatter = function(citekey)
         return '\\cite{' .. citekey .. '}'
@@ -244,6 +250,13 @@ local function get_available_formats(citekey, filetype)
       { label = '\\footcite{citation}', format = '\\footcite{' .. citekey .. '}' },
       { label = 'citation', format = citekey },
     }
+  elseif filetype == 'rnoweb' or filetype == 'plaintex' then
+    formats = {
+      { label = '\\textcite{citation}', format = '\\textcite{' .. citekey .. '}' },
+      { label = '\\parencite{citation}', format = '\\parencite{' .. citekey .. '}' },
+      { label = '\\footcite{citation}', format = '\\footcite{' .. citekey .. '}' },
+      { label = 'citation', format = citekey },
+    }
   else
     formats = {
       { label = '@citation', format = '@' .. citekey },
@@ -321,6 +334,7 @@ local function make_entry(pre_entry)
         tex = 'LaTeX/TeX',
         plaintex = 'PlainTeX',
         default = 'Default',
+        rnoweb = 'rnoweb',
       }
 
       -- Collect and display formats for each filetype

@@ -6,6 +6,7 @@ M.quarto = {}
 M.markdown = {}
 M.tex = {}
 M.typst = {}
+M.rnoweb = {}
 M['quarto.cached_bib'] = nil
 
 M.locate_quarto_bib = function()
@@ -136,6 +137,40 @@ M.locate_tex_bib = function()
   end
 end
 
+M.locate_rnw_bib = function()
+  local bufname = vim.api.nvim_buf_get_name(0)
+  local dirname = vim.fn.fnamemodify(bufname, ':h')
+
+  local lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
+  for _, line in ipairs(lines) do
+    -- ignore commented bibliography
+    local comment = string.match(line, '^%%')
+    if not comment then
+      local location = string.match(line, [[\bibliography{[ "']*([^'"\{\}]+)["' ]*}]])
+      if location then
+        local bib_path = location .. '.bib'
+        -- Return absolute path for consistency
+        if not bib_path:match '^/' then
+          bib_path = dirname .. '/' .. bib_path
+        end
+        return bib_path
+      end
+      -- checking for biblatex
+      location = string.match(line, [[\addbibresource{[ "']*([^'"\{\}]+)["' ]*}]])
+      if location then
+        -- addbibresource optionally allows you to add .bib
+        if not location:match '%.bib$' then -- Fixed: removed unnecessary second parameter
+          location = location .. '.bib'
+        end
+        -- Return absolute path for consistency
+        if not location:match '^/' then
+          location = dirname .. '/' .. location
+        end
+        return location
+      end
+    end
+  end
+end
 -- BBT item type mappings
 M.bbt_item_type_map = {
   journalArticle = 'article',
