@@ -197,22 +197,37 @@ local function append_to_bib(entry, locate_bib_fn)
 
   bib_path = vim.fn.expand(bib_path)
 
-  -- check if is already in the bib file
-  for line in io.lines(bib_path) do
-    if string.match(line, '^@') and string.match(line, citekey) then
-      return
+  -- check if is already in the bib file (only if file exists)
+  if vim.fn.filereadable(bib_path) == 1 then
+    for line in io.lines(bib_path) do
+      if string.match(line, '^@') and string.match(line, citekey) then
+        return
+      end
     end
   end
 
   -- Try BBT export first, fallback to manual generation
   local bib_entry = bib.entry_to_bbt_entry(entry, database.bbt)
 
+  -- Create directory if it doesn't exist
+  local dir = vim.fn.fnamemodify(bib_path, ':h')
+  if vim.fn.isdirectory(dir) == 0 then
+    vim.fn.mkdir(dir, 'p')
+  end
+
   -- otherwise append the entry to the bib file at bib_path
   local file = io.open(bib_path, 'a')
   if file == nil then
-    vim.notify('Could not open ' .. bib_path .. ' for appending', vim.log.levels.ERROR)
+    vim.notify('Could not open ' .. bib_path .. ' for writing. Check file permissions.', vim.log.levels.ERROR)
     return
   end
+
+  -- Add a newline before the entry if the file already exists and isn't empty
+  local file_exists = vim.fn.filereadable(bib_path) == 1 and vim.fn.getfsize(bib_path) > 0
+  if file_exists then
+    file:write('\n')
+  end
+
   file:write(bib_entry)
   file:close()
 
@@ -551,6 +566,9 @@ end
 --- @param opts any
 M.picker = function(opts)
   opts = opts or {}
+
+  -- Clear bibliography cache to ensure fresh detection
+  bib.clear_bib_cache()
 
   -- Store the original buffer's filetype before opening telescope
   local original_filetype = vim.bo.filetype

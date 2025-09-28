@@ -9,17 +9,70 @@ M.typst = {}
 M.rnoweb = {}
 M['quarto.cached_bib'] = nil
 
+-- Function to clear bibliography cache (useful when file is modified)
+M.clear_bib_cache = function()
+  M['quarto.cached_bib'] = nil
+  M['markdown.cached_bib'] = nil
+end
+
 M.locate_quarto_bib = function()
-  if M['quarto.cached_bib'] then
-    return M['quarto.cached_bib']
-  end
   local lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
+  local in_yaml_frontmatter = false
+  local yaml_end_count = 0
+
   for _, line in ipairs(lines) do
-    local location = string.match(line, [[bibliography:[ "']*(.+)["' ]*]])
-    if location then
-      M['quarto.cached_bib'] = location
-      return M['quarto.cached_bib']
+    -- Check for YAML frontmatter boundaries
+    if line:match('^---+%s*$') then
+      yaml_end_count = yaml_end_count + 1
+      if yaml_end_count == 1 then
+        in_yaml_frontmatter = true
+      elseif yaml_end_count == 2 then
+        in_yaml_frontmatter = false
+        break -- End of YAML frontmatter
+      end
+      goto continue
     end
+
+    -- Only process lines within YAML frontmatter
+    if in_yaml_frontmatter then
+      -- Handle various bibliography formats:
+      -- bibliography: references.bib
+      -- bibliography: "references.bib"
+      -- bibliography: 'references.bib'
+      -- bibliography: [references.bib]
+      -- bibliography: ["references.bib"]
+
+      local location = nil
+
+      -- First try simple format: bibliography: filename
+      location = line:match('^%s*bibliography:%s*([^%s"\'%[%]]+)')
+
+      -- If not found, try quoted format: bibliography: "filename" or 'filename'
+      if not location then
+        location = line:match('^%s*bibliography:%s*["\']([^"\']+)["\']')
+      end
+
+      -- If not found, try array format: bibliography: [filename]
+      if not location then
+        location = line:match('^%s*bibliography:%s*%[%s*["\']?([^"\'%[%]]+)["\']?')
+      end
+      if location then
+        -- Clean up the location string
+        location = location:gsub('^%s+', ''):gsub('%s+$', '')
+
+        -- Convert path to be relative to the current file's directory if it's not absolute
+        if not location:match('^/') then
+          local current_file = vim.api.nvim_buf_get_name(0)
+          local current_dir = vim.fn.fnamemodify(current_file, ':h')
+          location = current_dir .. '/' .. location
+        end
+
+        M['quarto.cached_bib'] = location
+        return location
+      end
+    end
+
+    ::continue::
   end
   -- no bib locally defined
   -- test for quarto project-wide definition
@@ -32,8 +85,17 @@ M.locate_quarto_bib = function()
       for line in io.lines(file) do
         local location = string.match(line, [[bibliography:[ "']*(.+)["' ]*]])
         if location then
+          -- Clean up the location string
+          location = location:gsub('^%s+', ''):gsub('%s+$', '')
+          location = location:gsub('["\']', '')
+
+          -- Convert path to be relative to the project root if it's not absolute
+          if not location:match('^/') then
+            location = root .. '/' .. location
+          end
+
           M['quarto.cached_bib'] = location
-          return M['quarto.cached_bib']
+          return location
         end
       end
     end)
@@ -44,16 +106,57 @@ M.locate_quarto_bib = function()
 end
 
 M.locate_markdown_bib = function()
-  if M['markdown.cached_bib'] then
-    return M['markdown.cached_bib']
-  end
   local lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
+  local in_yaml_frontmatter = false
+  local yaml_end_count = 0
+
   for _, line in ipairs(lines) do
-    local location = string.match(line, [[bibliography:[ "']*(.+)["' ]*]])
-    if location then
-      M['markdown.cached_bib'] = location
-      return M['markdown.cached_bib']
+    -- Check for YAML frontmatter boundaries
+    if line:match('^---+%s*$') then
+      yaml_end_count = yaml_end_count + 1
+      if yaml_end_count == 1 then
+        in_yaml_frontmatter = true
+      elseif yaml_end_count == 2 then
+        in_yaml_frontmatter = false
+        break -- End of YAML frontmatter
+      end
+      goto continue
     end
+
+    -- Only process lines within YAML frontmatter
+    if in_yaml_frontmatter then
+      local location = nil
+
+      -- First try simple format: bibliography: filename
+      location = line:match('^%s*bibliography:%s*([^%s"\'%[%]]+)')
+
+      -- If not found, try quoted format: bibliography: "filename" or 'filename'
+      if not location then
+        location = line:match('^%s*bibliography:%s*["\']([^"\']+)["\']')
+      end
+
+      -- If not found, try array format: bibliography: [filename]
+      if not location then
+        location = line:match('^%s*bibliography:%s*%[%s*["\']?([^"\'%[%]]+)["\']?')
+      end
+
+      if location then
+        -- Clean up the location string
+        location = location:gsub('^%s+', ''):gsub('%s+$', '')
+
+        -- Convert path to be relative to the current file's directory if it's not absolute
+        if not location:match('^/') then
+          local current_file = vim.api.nvim_buf_get_name(0)
+          local current_dir = vim.fn.fnamemodify(current_file, ':h')
+          location = current_dir .. '/' .. location
+        end
+
+        M['markdown.cached_bib'] = location
+        return location
+      end
+    end
+
+    ::continue::
   end
   -- no bib locally defined
   -- test for markdown project-wide definition
