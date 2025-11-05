@@ -77,17 +77,41 @@ M.locate_quarto_bib = function()
   -- no bib locally defined
   -- test for quarto project-wide definition
   local fname = vim.api.nvim_buf_get_name(0)
-  local root = require('lspconfig.util').root_pattern '_quarto.yml'(fname)
+
+  -- Try to find project root with _quarto.yml
+  local root = nil
+  local ok, lspconfig = pcall(require, 'lspconfig.util')
+  if ok then
+    root = lspconfig.root_pattern('_quarto.yml')(fname)
+  else
+    -- Fallback: manually search up directory tree
+    local current_dir = vim.fn.fnamemodify(fname, ':h')
+    for _ = 1, 10 do -- max 10 levels up
+      if vim.fn.filereadable(current_dir .. '/_quarto.yml') == 1 then
+        root = current_dir
+        break
+      end
+      local parent = vim.fn.fnamemodify(current_dir, ':h')
+      if parent == current_dir then
+        break -- reached filesystem root
+      end
+      current_dir = parent
+    end
+  end
+
   if root then
     local file = root .. '/_quarto.yml'
     -- Add error handling for file reading
-    local ok, err = pcall(function()
+    local ok, result = pcall(function()
+      local in_bibliography_section = false
       for line in io.lines(file) do
-        local location = string.match(line, [[bibliography:[ "']*(.+)["' ]*]])
+        -- Check for single-line bibliography format: bibliography: path.bib
+        local location = string.match(line, [[^%s*bibliography:[ "']*(.+)["' ]*$]])
         if location then
           -- Clean up the location string
           location = location:gsub('^%s+', ''):gsub('%s+$', '')
           location = location:gsub('["\']', '')
+          location = location:gsub('^%-+%s*', '') -- Remove leading dash and spaces
 
           -- Convert path to be relative to the project root if it's not absolute
           if not location:match('^/') then
@@ -97,10 +121,37 @@ M.locate_quarto_bib = function()
           M['quarto.cached_bib'] = location
           return location
         end
+
+        -- Check for multi-line bibliography array format
+        if line:match('^%s*bibliography:%s*$') then
+          in_bibliography_section = true
+        elseif in_bibliography_section then
+          -- Match array item: - path.bib or - "path.bib"
+          location = string.match(line, [[^%s*%-+%s*["']?([^"']+)["']?%s*$]])
+          if location then
+            -- Clean up the location string
+            location = location:gsub('^%s+', ''):gsub('%s+$', '')
+            location = location:gsub('["\']', '')
+
+            -- Convert path to be relative to the project root if it's not absolute
+            if not location:match('^/') then
+              location = root .. '/' .. location
+            end
+
+            M['quarto.cached_bib'] = location
+            return location
+          elseif not line:match('^%s*%-') and not line:match('^%s*$') then
+            -- Exit bibliography section if we hit a non-array line
+            in_bibliography_section = false
+          end
+        end
       end
+      return nil
     end)
-    if not ok then
-      vim.notify('Error reading _quarto.yml: ' .. tostring(err), vim.log.levels.WARN)
+    if ok and result then
+      return result
+    elseif not ok then
+      vim.notify('Error reading _quarto.yml: ' .. tostring(result), vim.log.levels.WARN)
     end
   end
 end
@@ -161,7 +212,28 @@ M.locate_markdown_bib = function()
   -- no bib locally defined
   -- test for markdown project-wide definition
   local fname = vim.api.nvim_buf_get_name(0)
-  local root = require('lspconfig.util').root_pattern '_markdown.yml'(fname)
+
+  -- Try to find project root with _markdown.yml
+  local root = nil
+  local ok, lspconfig = pcall(require, 'lspconfig.util')
+  if ok then
+    root = lspconfig.root_pattern('_markdown.yml')(fname)
+  else
+    -- Fallback: manually search up directory tree
+    local current_dir = vim.fn.fnamemodify(fname, ':h')
+    for _ = 1, 10 do -- max 10 levels up
+      if vim.fn.filereadable(current_dir .. '/_markdown.yml') == 1 then
+        root = current_dir
+        break
+      end
+      local parent = vim.fn.fnamemodify(current_dir, ':h')
+      if parent == current_dir then
+        break -- reached filesystem root
+      end
+      current_dir = parent
+    end
+  end
+
   if root then
     local file = root .. '/_markdown.yml'
     -- Add error handling for file reading
