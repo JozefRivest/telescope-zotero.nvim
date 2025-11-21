@@ -196,6 +196,8 @@ local function append_to_bib(entry, locate_bib_fn)
   end
 
   bib_path = vim.fn.expand(bib_path)
+  -- Convert to absolute path to handle relative paths correctly
+  bib_path = vim.fn.fnamemodify(bib_path, ':p')
 
   -- check if is already in the bib file (only if file exists)
   if vim.fn.filereadable(bib_path) == 1 then
