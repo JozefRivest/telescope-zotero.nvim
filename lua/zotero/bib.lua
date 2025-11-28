@@ -259,14 +259,50 @@ M.locate_typst_bib = function()
   local lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
   for _, line in ipairs(lines) do
     -- Adjust the pattern to capture only the first argument (the .bib file name)
-    local location = string.match(line, '#bibliography%s*%(%s*"([^"]+)"')
+    local location = string.match(line, '#bibliography%s*%([^"]*"([^"]+)"')
 
     if location then
       local expanded_path = vim.fn.expand(location)
 
-      -- If the path is relative, convert it to an absolute path
-      if not expanded_path:match '^/' then
-        expanded_path = dirname .. '/' .. expanded_path
+      -- Try to find project root with typst.toml
+      local root = nil
+      local ok, lspconfig = pcall(require, 'lspconfig.util')
+      if ok then
+        root = lspconfig.root_pattern('typst.toml')(bufname)
+      else
+        -- Fallback: manually search up directory tree
+        local current_dir = dirname
+        for _ = 1, 10 do -- max 10 levels up
+          if vim.fn.filereadable(current_dir .. '/typst.toml') == 1 then
+            root = current_dir
+            break
+          end
+          local parent = vim.fn.fnamemodify(current_dir, ':h')
+          if parent == current_dir then
+            break -- reached filesystem root
+          end
+          current_dir = parent
+        end
+      end
+
+      -- In Typst, paths starting with "/" are relative to the project root (not filesystem root)
+      -- All other paths are relative to the current file's directory
+      if expanded_path:match '^/' then
+        -- Path starting with "/" is project-relative in Typst
+        if root then
+          -- Remove the leading "/" and prepend the project root
+          expanded_path = root .. expanded_path
+        else
+          -- No project root found, treat as relative to current file's directory
+          expanded_path = dirname .. expanded_path
+        end
+      else
+        -- Path is relative to current file's directory
+        if root then
+          expanded_path = root .. '/' .. expanded_path
+        else
+          expanded_path = dirname .. '/' .. expanded_path
+        end
       end
 
       return expanded_path
