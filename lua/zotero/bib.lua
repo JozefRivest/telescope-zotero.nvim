@@ -8,11 +8,15 @@ M.tex = {}
 M.typst = {}
 M.rnoweb = {}
 M['quarto.cached_bib'] = nil
+M['tex.cached_bib'] = nil
+M['tex.main_file_cache'] = nil
 
 -- Function to clear bibliography cache (useful when file is modified)
 M.clear_bib_cache = function()
   M['quarto.cached_bib'] = nil
   M['markdown.cached_bib'] = nil
+  M['tex.cached_bib'] = nil
+  M['tex.main_file_cache'] = nil
 end
 
 M.locate_quarto_bib = function()
@@ -313,39 +317,169 @@ M.locate_typst_bib = function()
   return nil
 end
 
-M.locate_tex_bib = function()
-  local bufname = vim.api.nvim_buf_get_name(0)
-  local dirname = vim.fn.fnamemodify(bufname, ':h')
+-- Helper function: Search a single file for bibliography declarations
+local function search_file_for_bib(file_path)
+  local file = io.open(file_path, 'r')
+  if not file then
+    return nil
+  end
 
-  local lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
-  for _, line in ipairs(lines) do
-    -- ignore commented bibliography
-    local comment = string.match(line, '^%%')
-    if not comment then
-      local location = string.match(line, [[\bibliography{[ "']*([^'"\{\}]+)["' ]*}]])
+  local file_dir = vim.fn.fnamemodify(file_path, ':h')
+
+  for line in file:lines() do
+    -- Skip commented lines
+    if not line:match '^%%' then
+      -- Check for \bibliography{file}
+      local location = line:match [[\bibliography{[ "']*([^'"\{\}]+)["' ]*}]]
       if location then
         local bib_path = location .. '.bib'
-        -- Return absolute path for consistency
         if not bib_path:match '^/' then
-          bib_path = dirname .. '/' .. bib_path
+          bib_path = file_dir .. '/' .. bib_path
         end
+        file:close()
         return bib_path
       end
-      -- checking for biblatex
-      location = string.match(line, [[\addbibresource{[ "']*([^'"\{\}]+)["' ]*}]])
+
+      -- Check for \addbibresource{file.bib}
+      location = line:match [[\addbibresource{[ "']*([^'"\{\}]+)["' ]*}]]
       if location then
-        -- addbibresource optionally allows you to add .bib
-        if not location:match '%.bib$' then -- Fixed: removed unnecessary second parameter
+        if not location:match '%.bib$' then
           location = location .. '.bib'
         end
-        -- Return absolute path for consistency
         if not location:match '^/' then
-          location = dirname .. '/' .. location
+          location = file_dir .. '/' .. location
         end
+        file:close()
         return location
       end
     end
   end
+
+  file:close()
+  return nil
+end
+
+-- Helper function: Find the main LaTeX file containing \documentclass
+local function find_tex_main_file(current_file)
+  -- Check cache first
+  if M['tex.main_file_cache'] then
+    return M['tex.main_file_cache']
+  end
+
+  local current_dir = vim.fn.fnamemodify(current_file, ':h')
+
+  -- Search up to 10 levels
+  for _ = 1, 10 do
+    -- Find all .tex files in current_dir
+    local tex_files = vim.fn.glob(current_dir .. '/*.tex', false, true)
+
+    for _, tex_file in ipairs(tex_files) do
+      -- Read file and check for \documentclass
+      local file = io.open(tex_file, 'r')
+      if file then
+        for line in file:lines() do
+          if not line:match '^%%' and line:match '\\documentclass' then
+            file:close()
+            M['tex.main_file_cache'] = tex_file
+            return tex_file
+          end
+        end
+        file:close()
+      end
+    end
+
+    -- Move to parent directory
+    local parent = vim.fn.fnamemodify(current_dir, ':h')
+    if parent == current_dir then
+      break -- reached filesystem root
+    end
+    current_dir = parent
+  end
+
+  return nil
+end
+
+-- Helper function: Extract all \input{} and \include{} commands from a file
+local function extract_tex_inputs(file_path)
+  local inputs = {}
+  local file = io.open(file_path, 'r')
+  if not file then
+    return inputs
+  end
+
+  local file_dir = vim.fn.fnamemodify(file_path, ':h')
+
+  for line in file:lines() do
+    -- Skip commented lines
+    if not line:match '^%%' then
+      -- Match \input{filename}
+      local input_file = line:match [[\input%s*{%s*([^}]+)%s*}]]
+
+      -- Match \include{filename}
+      if not input_file then
+        input_file = line:match [[\include%s*{%s*([^}]+)%s*}]]
+      end
+
+      if input_file then
+        -- Clean up the filename
+        input_file = input_file:gsub('^%s+', ''):gsub('%s+$', '')
+        input_file = input_file:gsub('["\']', '')
+
+        -- Add .tex extension if missing
+        if not input_file:match '%.tex$' then
+          input_file = input_file .. '.tex'
+        end
+
+        -- Convert to absolute path
+        if not input_file:match '^/' then
+          input_file = file_dir .. '/' .. input_file
+        end
+
+        table.insert(inputs, input_file)
+      end
+    end
+  end
+
+  file:close()
+  return inputs
+end
+
+M.locate_tex_bib = function()
+  -- Check cache first
+  if M['tex.cached_bib'] then
+    return M['tex.cached_bib']
+  end
+
+  local current_file = vim.api.nvim_buf_get_name(0)
+
+  -- Search current file (backward compatible)
+  local bib_path = search_file_for_bib(current_file)
+  if bib_path then
+    M['tex.cached_bib'] = bib_path
+    return bib_path
+  end
+
+  -- Find and search main file
+  local main_file = find_tex_main_file(current_file)
+  if main_file then
+    bib_path = search_file_for_bib(main_file)
+    if bib_path then
+      M['tex.cached_bib'] = bib_path
+      return bib_path
+    end
+
+    -- Search all included files
+    local included_files = extract_tex_inputs(main_file)
+    for _, included_file in ipairs(included_files) do
+      bib_path = search_file_for_bib(included_file)
+      if bib_path then
+        M['tex.cached_bib'] = bib_path
+        return bib_path
+      end
+    end
+  end
+
+  return nil
 end
 
 M.locate_rnw_bib = function()
