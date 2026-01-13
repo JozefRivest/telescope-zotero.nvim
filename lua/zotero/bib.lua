@@ -370,6 +370,22 @@ local function find_tex_main_file(current_file)
 
   -- Search up to 10 levels
   for _ = 1, 10 do
+    -- First, check for main/main.tex subdirectory pattern
+    local main_tex_path = current_dir .. '/main/main.tex'
+    if vim.fn.filereadable(main_tex_path) == 1 then
+      local file = io.open(main_tex_path, 'r')
+      if file then
+        for line in file:lines() do
+          if not line:match '^%%' and line:match '\\documentclass' then
+            file:close()
+            M['tex.main_file_cache'] = main_tex_path
+            return main_tex_path
+          end
+        end
+        file:close()
+      end
+    end
+
     -- Find all .tex files in current_dir
     local tex_files = vim.fn.glob(current_dir .. '/*.tex', false, true)
 
