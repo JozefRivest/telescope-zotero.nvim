@@ -246,6 +246,36 @@ local function append_to_bib(entry, locate_bib_fn)
   vim.print('wrote ' .. citekey .. ' to ' .. bib_path .. ' (' .. format_type .. ')')
 end
 
+-- Gets combined citation formats for multiple citekeys
+local function get_available_formats_multi(citekeys, filetype)
+  local combined = table.concat(citekeys, ', ')
+  if filetype == 'quarto' or filetype == 'markdown' then
+    return {
+      { label = '[@c1; @c2]', format = '[@' .. table.concat(citekeys, '; @') .. ']' },
+      { label = '@c1 @c2', format = table.concat(vim.tbl_map(function(k) return '@' .. k end, citekeys), ' ') },
+      { label = 'c1, c2', format = combined },
+    }
+  elseif filetype == 'typst' then
+    return {
+      { label = '#cite(<c1>, <c2>)', format = '#cite(' .. table.concat(vim.tbl_map(function(k) return '<' .. k .. '>' end, citekeys), ', ') .. ')' },
+      { label = '@c1 @c2', format = table.concat(vim.tbl_map(function(k) return '@' .. k end, citekeys), ' ') },
+      { label = 'c1, c2', format = combined },
+    }
+  elseif filetype == 'tex' or filetype == 'plaintex' or filetype == 'rnoweb' then
+    return {
+      { label = '\\cite{c1,c2}', format = '\\cite{' .. combined .. '}' },
+      { label = '\\textcite{c1,c2}', format = '\\textcite{' .. combined .. '}' },
+      { label = '\\parencite{c1,c2}', format = '\\parencite{' .. combined .. '}' },
+      { label = 'c1, c2', format = combined },
+    }
+  else
+    return {
+      { label = '[@c1; @c2]', format = '[@' .. table.concat(citekeys, '; @') .. ']' },
+      { label = 'c1, c2', format = combined },
+    }
+  end
+end
+
 -- This function gets the available citation formats for the given filetype
 local function get_available_formats(citekey, filetype)
   local formats = {}
@@ -590,25 +620,50 @@ M.picker = function(opts)
       attach_mappings = function(prompt_bufnr, map)
         -- Default action: show format selection popup
         actions.select_default:replace(function()
-          local entry = action_state.get_selected_entry()
-          local citekey = entry.value.citekey
-
           -- Use quarto as default if original_filetype is empty or not recognized
           if original_filetype == '' then
             vim.notify("Empty original filetype, defaulting to 'quarto'", vim.log.levels.WARN)
             original_filetype = 'quarto'
           end
 
-          local formats = get_available_formats(citekey, original_filetype)
+          local picker = action_state.get_current_picker(prompt_bufnr)
+          local selected = picker:get_multi_selection()
+          local focused = action_state.get_selected_entry()
+
+          -- Fall back to focused entry if nothing is multi-selected
+          local entries = (#selected > 0) and selected or { focused }
 
           -- Close the picker first
           actions.close(prompt_bufnr)
 
-          -- Force showing the format selection popup for all filetypes
           local current_win = vim.api.nvim_get_current_win()
-          local popup = FormatSelectionPopup.new(nil, formats, function(format)
-            insert_citation(format, entry, ft_options.locate_bib)
-          end, current_win)
+
+          if #entries == 1 then
+            local entry = entries[1]
+            local formats = get_available_formats(entry.value.citekey, original_filetype)
+            FormatSelectionPopup.new(nil, formats, function(format)
+              insert_citation(format, entry, ft_options.locate_bib)
+            end, current_win)
+          else
+            local citekeys = vim.tbl_map(function(e) return e.value.citekey end, entries)
+            local formats = get_available_formats_multi(citekeys, original_filetype)
+            FormatSelectionPopup.new(nil, formats, function(format)
+              vim.api.nvim_put({ format }, '', false, true)
+              for _, e in ipairs(entries) do
+                append_to_bib(e, ft_options.locate_bib)
+              end
+            end, current_win)
+          end
+        end)
+
+        -- Multi-select toggle
+        map('i', '<Tab>', function()
+          actions.toggle_selection(prompt_bufnr)
+          actions.move_selection_next(prompt_bufnr)
+        end)
+        map('n', '<Tab>', function()
+          actions.toggle_selection(prompt_bufnr)
+          actions.move_selection_next(prompt_bufnr)
         end)
 
         -- Update the mapping to open PDF or DOI
@@ -625,13 +680,13 @@ M.picker = function(opts)
         map('i', '<C-h>', function()
           vim.api.nvim_echo({
             { 'Available Commands:', 'Title' },
-            { ' <CR>: Select citation | <C-o>: Open attachment', 'None' },
+            { ' <CR>: Select citation | <Tab>: Multi-select | <C-o>: Open attachment', 'None' },
           }, false, {})
         end)
         map('n', '?', function()
           vim.api.nvim_echo({
             { 'Available Commands:', 'Title' },
-            { ' <CR>: Select citation | o: Open attachment', 'None' },
+            { ' <CR>: Select citation | <Tab>: Multi-select | o: Open attachment', 'None' },
           }, false, {})
         end)
 
