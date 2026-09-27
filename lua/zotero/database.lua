@@ -52,6 +52,11 @@ local function open_connections()
   return zotero_db, bbt_db
 end
 
+-- Fresh read-only connection to zotero.sqlite only.
+M.open_zotero = function()
+  return connect(M.opts.zotero_db_path)
+end
+
 local query_bbt = [[
   SELECT
     itemKey, citationKey
@@ -276,7 +281,17 @@ function M.get_items()
   -- Override layer 1: BBT HTTP API keys (Zotero 8 mode).
   -- BBT 8 generates new-format keys lazily as items are touched in Zotero.
   -- These override migrated keys for items BBT has already processed.
-  if M.zotero8_mode then
+  -- Zotero 8 has a native citationKey field that BBT 8 keeps up to date; when it's
+  -- present the API is redundant (and slow/unavailable while Zotero is closed).
+  local has_native_keys = false
+  for _, v in ipairs(sql_items) do
+    if v.fieldName == 'citationKey' then
+      has_native_keys = true
+      break
+    end
+  end
+
+  if M.zotero8_mode and not has_native_keys then
     local api_keys = get_citekeys_from_api(db)
     if api_keys then
       for item_key, citekey in pairs(api_keys) do
@@ -297,7 +312,7 @@ function M.get_items()
 
   for _, v in pairs(sql_items) do
     if raw_items[v.key] == nil then
-      raw_items[v.key] = { creators = {}, attachment = {}, key = v.key }
+      raw_items[v.key] = { creators = {}, attachment = {}, key = v.key, itemID = v.itemID }
     end
     raw_items[v.key][v.fieldName] = v.value
     raw_items[v.key].itemType = v.typeName
@@ -322,7 +337,11 @@ function M.get_items()
   end
 
   for key, item in pairs(raw_items) do
-    local citekey = bbt_citekeys[key]
+    -- Top layer: Zotero 8's native citationKey field (current BBT formula).
+    local citekey = item.citationKey
+    if type(citekey) ~= 'string' or citekey == '' then
+      citekey = bbt_citekeys[key]
+    end
     if citekey ~= nil then
       item.citekey = citekey
       table.insert(items, item)

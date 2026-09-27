@@ -7,6 +7,7 @@ local action_state = require 'telescope.actions.state'
 local actions = require 'telescope.actions'
 local bib = require 'zotero.bib'
 local database = require 'zotero.database'
+local notes = require 'zotero.notes'
 
 local M = {}
 
@@ -65,11 +66,15 @@ local default_opts = {
       locate_bib = bib.locate_quarto_bib,
     },
   },
+  -- literature notes (see lua/zotero/notes.lua for all options)
+  notes = notes.default_opts,
 }
 M.config = default_opts
 
 M.setup = function(opts)
-  M.config = vim.tbl_extend('force', default_opts, opts or {})
+  opts = opts or {}
+  M.config = vim.tbl_extend('force', default_opts, opts)
+  M.config.notes = vim.tbl_extend('force', notes.default_opts, opts.notes or {})
 end
 
 local function get_attachment_options(item)
@@ -690,6 +695,159 @@ M.picker = function(opts)
           }, false, {})
         end)
 
+        return true
+      end,
+    })
+    :find()
+end
+
+-- Asks which template to use for `entries` (skipped when every note already exists).
+local function choose_template(entries, notes_opts, callback)
+  local missing = vim.tbl_filter(function(e)
+    return vim.fn.filereadable(notes.note_path(e.value, notes_opts)) == 0
+  end, entries)
+  if #missing == 0 then
+    return callback(nil)
+  end
+
+  local choices = {}
+  if #missing == 1 then
+    local suggested = notes.suggest_template(missing[1].value, notes_opts)
+    table.insert(choices, { label = suggested.name .. ' (suggested)', template = suggested })
+    for _, t in ipairs(notes_opts.templates) do
+      if t ~= suggested then
+        table.insert(choices, { label = t.name, template = t })
+      end
+    end
+  else
+    table.insert(choices, { label = 'by Zotero tag (default: ' .. notes_opts.templates[1].name .. ')', template = nil })
+    for _, t in ipairs(notes_opts.templates) do
+      table.insert(choices, { label = t.name, template = t })
+    end
+  end
+
+  vim.ui.select(choices, {
+    prompt = 'Note template:',
+    format_item = function(c)
+      return c.label
+    end,
+  }, function(choice)
+    if choice then
+      callback(choice.template)
+    end
+  end)
+end
+
+--- Picker that creates/opens zotlit-style literature notes
+--- @param opts any
+M.notes_picker = function(opts)
+  opts = opts or {}
+  local notes_opts = M.config.notes
+  if not notes_opts.dir then
+    vim.notify('[zotero] set `notes.dir` in setup() to use literature notes', vim.log.levels.ERROR)
+    return
+  end
+
+  notes.build_index(notes_opts)
+  local items = get_items()
+  local citekeys = {}
+  for _, item in ipairs(items) do
+    citekeys[item.key] = item.citekey
+  end
+
+  local function with_details(item)
+    if not item.tags then
+      notes.load_details(item)
+    end
+    return item
+  end
+
+  local function run(prompt_bufnr, insert_link)
+    local picker = action_state.get_current_picker(prompt_bufnr)
+    local selected = picker:get_multi_selection()
+    local entries = (#selected > 0) and selected or { action_state.get_selected_entry() }
+    actions.close(prompt_bufnr)
+
+    for _, e in ipairs(entries) do
+      with_details(e.value)
+    end
+
+    choose_template(entries, notes_opts, function(template)
+      local paths, created = {}, 0
+      for _, e in ipairs(entries) do
+        local path, is_new = notes.create(e.value, template or notes.suggest_template(e.value, notes_opts), notes_opts, citekeys)
+        if path then
+          table.insert(paths, path)
+          created = created + (is_new and 1 or 0)
+        end
+      end
+      if #paths == 0 then
+        return
+      end
+
+      if insert_link or notes_opts.insert_link then
+        local links = vim.tbl_map(function(e)
+          return '[[' .. vim.fn.fnamemodify(notes.note_path(e.value, notes_opts), ':t:r') .. ']]'
+        end, entries)
+        vim.api.nvim_put({ table.concat(links, ', ') }, '', false, true)
+      end
+
+      vim.notify(('[zotero] %d note(s) created, %d already existed'):format(created, #paths - created), vim.log.levels.INFO)
+      if not insert_link then
+        vim.cmd.edit(vim.fn.fnameescape(paths[1]))
+        if #paths > 1 then
+          vim.fn.setqflist(vim.tbl_map(function(p)
+            return { filename = p, lnum = 1 }
+          end, paths))
+          vim.notify('[zotero] all notes are in the quickfix list', vim.log.levels.INFO)
+        end
+      end
+    end)
+  end
+
+  pickers
+    .new(opts, {
+      prompt_title = 'Zotero literature notes',
+      finder = finders.new_table {
+        results = items,
+        entry_maker = make_entry,
+      },
+      sorter = conf.generic_sorter(opts),
+      previewer = previewers.new_buffer_previewer {
+        title = 'Literature note',
+        define_preview = function(self, entry)
+          local path = notes.note_path(entry.value, notes_opts)
+          local lines
+          if vim.fn.filereadable(path) == 1 then
+            lines = vim.fn.readfile(path)
+          else
+            local item = with_details(entry.value)
+            lines = notes.render(item, notes.suggest_template(item, notes_opts), notes_opts, citekeys)
+            table.insert(lines, 1, '<!-- new note: ' .. path .. ' -->')
+          end
+          vim.api.nvim_buf_set_lines(self.state.bufnr, 0, -1, false, lines)
+          vim.api.nvim_set_option_value('filetype', 'markdown', { buf = self.state.bufnr })
+        end,
+      },
+      attach_mappings = function(prompt_bufnr, map)
+        actions.select_default:replace(function()
+          run(prompt_bufnr, false)
+        end)
+        for _, mode in ipairs { 'i', 'n' } do
+          map(mode, '<C-l>', function()
+            run(prompt_bufnr, true)
+          end)
+          map(mode, '<Tab>', function()
+            actions.toggle_selection(prompt_bufnr)
+            actions.move_selection_next(prompt_bufnr)
+          end)
+        end
+        map('i', '<C-o>', function()
+          open_attachment(action_state.get_selected_entry().value)
+        end)
+        map('n', 'o', function()
+          open_attachment(action_state.get_selected_entry().value)
+        end)
         return true
       end,
     })
