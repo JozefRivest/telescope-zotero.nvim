@@ -255,7 +255,8 @@ function M.get_items()
   local sql_items = db:eval(query_items)
   local sql_creators = db:eval(query_creators)
 
-  if sql_items == nil or sql_creators == nil then
+  -- sqlite.lua's eval returns `true` (not an empty table) when a query yields no rows.
+  if type(sql_items) ~= 'table' or type(sql_creators) ~= 'table' then
     vim.notify_once('[zotero] could not query database.', vim.log.levels.WARN, {})
     return {}
   end
@@ -265,7 +266,7 @@ function M.get_items()
   -- Base layer: keys from better-bibtex.sqlite or better-bibtex.migrated
   if bbt then
     local sql_bbt = bbt:eval(query_bbt)
-    if sql_bbt then
+    if type(sql_bbt) == 'table' then
       for _, v in pairs(sql_bbt) do
         bbt_citekeys[v.itemKey] = v.citationKey
       end
@@ -286,7 +287,7 @@ function M.get_items()
 
   -- Override layer 2: keys in the extra field (manually pinned, always current format).
   local sql_extra = db:eval(query_citekeys_from_extra)
-  if sql_extra then
+  if type(sql_extra) == 'table' then
     for _, v in pairs(sql_extra) do
       if type(v.citationKey) == 'string' and v.citationKey ~= '' then
         bbt_citekeys[v.itemKey] = v.citationKey
