@@ -81,6 +81,40 @@ Available formats by filetype:
 - For Typst files: `@citekey` and `#cite(<citekey>)`
 - For LaTeX/TeX files: `\cite{citekey}`
 
+## Literature notes (zotlit-style)
+
+`:Telescope zotero notes` creates Obsidian literature notes from Zotero items, similar to the
+[zotlit](https://github.com/PKM-er/obsidian-zotlit) plugin. Pick one or more items (`<Tab>` to multi-select),
+choose a template, and the note is created in `notes.dir` (or opened if it already exists).
+
+Existing notes are found by their `zotero-key` frontmatter, so notes created by zotlit are reused even when
+their file name differs from the current citation key. The same fields are written for new notes, so zotlit
+still recognizes them.
+
+| Key | Action |
+|-----|--------|
+| `<CR>` | Create/open the note (several selections go to the quickfix list) |
+| `<C-l>` | Create the note(s) and insert `[[links]]` at the cursor |
+| `<C-o>` / `o` | Open attachment |
+
+```lua
+require('zotero').setup {
+  notes = {
+    dir = '~/Dropbox/obsidian/literature_notes/lit',
+    -- file name for new notes (without .md)
+    filename = function(item) return item.citekey end,
+    -- plain markdown bodies; {{title}}, {{citekey}}, {{year}}, {{authors}}, {{journal}}, {{doi}} are substituted.
+    -- The template whose `tag` matches a Zotero tag of the item is suggested first.
+    templates = {
+      { name = 'literature', file = '~/Dropbox/obsidian/template/zotlit-note-standard.liquid.md' },
+      { name = 'method', file = '~/Dropbox/obsidian/template/zotlit-note-method.liquid.md', tag = 'method' },
+    },
+    -- optional: function(item, citekeys) returning { { key, value }, ... } for the YAML frontmatter
+    frontmatter = nil,
+  },
+}
+```
+
 ## Inspiration
 
 This extension is inspired by the following plugins that all do an amazing job, but not quite what I need.
