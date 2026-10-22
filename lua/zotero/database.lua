@@ -2,8 +2,62 @@ local sqlite = require 'sqlite.db'
 
 local M = {}
 
+-- Zotero runs in WAL mode with an exclusive lock: recent writes live only in
+-- `<db>-wal` until Zotero checkpoints (usually on quit), and `immutable=1` ignores
+-- the WAL. So when a WAL exists, copy db + WAL to a private snapshot and open that
+-- normally, letting SQLite replay the pending transactions.
+--
+-- Every snapshot gets a fresh filename: overwriting files that an earlier connection
+-- in this process still has open corrupts SQLite's shared per-inode state (shm
+-- mapping, locks) and fails with "disk I/O error".
+local snapshots = {} -- source path -> { db = <sqlite.db>, file = <snapshot path> }
+local snapshot_seq = 0
+
+local function drop_snapshot(path)
+  local prev = snapshots[path]
+  if not prev then return end
+  snapshots[path] = nil
+  pcall(prev.db.close, prev.db)
+  for _, suffix in ipairs { '', '-wal', '-shm', '-journal' } do
+    os.remove(prev.file .. suffix)
+  end
+end
+
+local function snapshot(path)
+  local wal = vim.uv.fs_stat(path .. '-wal')
+  if not wal or wal.size == 0 then return nil end
+
+  drop_snapshot(path)
+
+  local dir = ('%s/telescope-zotero/%d'):format(vim.fn.stdpath 'cache', vim.uv.os_getpid())
+  vim.fn.mkdir(dir, 'p')
+  snapshot_seq = snapshot_seq + 1
+  local copy = ('%s/%d-%s'):format(dir, snapshot_seq, vim.fs.basename(path))
+  if not vim.uv.fs_copyfile(path, copy) or not vim.uv.fs_copyfile(path .. '-wal', copy .. '-wal') then
+    os.remove(copy)
+    os.remove(copy .. '-wal')
+    return nil
+  end
+  local ok, db = pcall(sqlite.open, sqlite, copy)
+  if not ok or not db then return nil end
+  snapshots[path] = { db = db, file = copy }
+  return db
+end
+
+-- Clean up this instance's snapshots on exit.
+vim.api.nvim_create_autocmd('VimLeavePre', {
+  callback = function()
+    for path in pairs(snapshots) do
+      drop_snapshot(path)
+    end
+    vim.fn.delete(('%s/telescope-zotero/%d'):format(vim.fn.stdpath 'cache', vim.uv.os_getpid()), 'd')
+  end,
+})
+
 local function connect(path, optional)
   path = vim.fn.expand(path)
+  local snap = snapshot(path)
+  if snap then return snap end
   local ok, db = pcall(sqlite.open, sqlite, 'file:' .. path .. '?immutable=1', { open_mode = 'ro' })
   if ok then
     return db
